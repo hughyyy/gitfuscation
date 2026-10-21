@@ -77,6 +77,18 @@ The full settings schema (with defaults) lives in SPEC §3. Highlights:
 | `output.replace` | false | Allow overwriting an existing out path |
 | `preview.colorScale` | github | `github` (relative) or `absolute` thresholds |
 
+### Signwriter (banner painting)
+
+In the Generator, tick **Paint mode**, pick a brush level on the black→green
+slider, then click or drag across the chart — right-click erases a cell, the
+"erase all" button clears the banner. Each painted level maps to a fixed commit
+count (`levelCounts`, default 6/14/28/60), so the generated repo contains
+exactly the pattern you drew. The banner travels with the settings, so preview
+and generate always agree; while painting is active the preview uses shade-exact
+absolute levels. On GitHub, the contribution graph re-colors cells with its own
+relative algorithm — keep painted counts above the natural background for the
+clearest result.
+
 ## Repositories: inspect authorship + reattribution
 
 Inspect any repo under a root directory (default: the parent of this project —

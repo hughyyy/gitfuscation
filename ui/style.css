@@ -108,6 +108,22 @@ input:focus, select:focus { outline: 1px solid var(--accent); }
 .range-row input { flex: 1; }
 .range-row output { min-width: 34px; text-align: right; color: var(--text); font-size: 12px; }
 
+#paint-level {
+  height: 18px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #ebedf0 0%, #9be9a8 25%, #40c463 50%, #30a14e 75%, #216e39 100%);
+  accent-color: #216e39;
+}
+.paint-hint { font-size: 12px; color: var(--dim); margin: 6px 0; line-height: 1.4; }
+
+.chart .cell.painted { outline: 1.5px solid var(--accent); outline-offset: 0; }
+.chart .cell.painted::after {
+  content: '';
+  position: static;
+}
+.chart.painting .cell { cursor: crosshair; }
+.chart .cell:hover { filter: brightness(1.25); }
+
 label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
 .thresholds { display: flex; gap: 6px; }
 .thresholds input { width: 60px; }

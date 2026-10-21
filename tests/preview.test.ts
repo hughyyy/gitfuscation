@@ -73,6 +73,35 @@ test('github scale uses the window max; absolute stays stable', () => {
   assert.equal(zeroCell?.level, 0);
 });
 
+test('painted banner renders exact painted levels; unpainted stays natural', () => {
+  const s = settings('2025-01-05', 40);
+  s.activity.burstProbability = 0;
+  const before = previewFor(s);
+  s.signwriter.overrides = { '2025-01-05': 4, '2025-01-06': 2, '2025-01-10': 1 };
+  const payload = previewFor(s);
+  const cell = (iso: string) => payload.cells.find((c) => c.dateISO === iso)!;
+  assert.equal(cell('2025-01-05').level, 4);
+  assert.equal(cell('2025-01-05').count, 60);
+  assert.equal(cell('2025-01-06').level, 2);
+  assert.equal(cell('2025-01-06').count, 14);
+  assert.equal(cell('2025-01-10').level, 1);
+  assert.equal(cell('2025-01-10').count, 6);
+  // Unpainted days keep their generated counts.
+  const same = payload.cells.filter((c) => !['2025-01-05', '2025-01-06', '2025-01-10'].includes(c.dateISO));
+  const beforeSame = before.cells.filter((c) => !['2025-01-05', '2025-01-06', '2025-01-10'].includes(c.dateISO));
+  assert.deepEqual(same.map((c) => c.count), beforeSame.map((c) => c.count));
+  // Painting level 0 produces an empty day.
+  s.signwriter.overrides = { ...s.signwriter.overrides, '2025-01-11': 0 };
+  assert.equal(previewFor(s).cells.find((c) => c.dateISO === '2025-01-11')!.count, 0);
+});
+
+test('renderAscii handles a painted banner', () => {
+  const s = settings('2025-01-05', 60);
+  s.signwriter.overrides = { '2025-01-05': 4 };
+  const out = renderAscii(previewFor(s));
+  assert.match(out, /commits: \d+/);
+});
+
 test('renderAscii emits 7 labeled rows and a totals line', () => {
   const s = settings('2025-01-05', 60);
   const out = renderAscii(previewFor(s));

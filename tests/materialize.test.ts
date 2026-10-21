@@ -117,6 +117,31 @@ test('worktree is checked out after generation', async () => {
   assert.match(content, /# activity-history/, `${first} has the project header`);
 });
 
+test('preview and repo per-day counts agree with a painted banner', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gitfuscation-'));
+  const settings = testSettings(path.join(dir, 'repo'), 40);
+  settings.signwriter.overrides = {
+    '2025-01-10': 4, // painted bright
+    '2025-01-12': 0, // erased
+    '2025-01-14': 1, // painted dim
+  };
+  const result = await generateRepo(settings);
+
+  const payload = previewFor(settings);
+  assert.equal(payload.cells.find((c) => c.dateISO === '2025-01-10')!.count, 60);
+  assert.equal(payload.cells.find((c) => c.dateISO === '2025-01-14')!.count, 6);
+
+  const commits = await listCommits(result.outPath);
+  const perDay = new Map<string, number>();
+  for (const c of commits.slice(1)) {
+    const key = dateKeyOfEpoch(c.authorTime, settings.output.tzOffset);
+    perDay.set(key, (perDay.get(key) ?? 0) + 1);
+  }
+  for (const cell of payload.cells) {
+    assert.equal(perDay.get(cell.dateISO) ?? 0, cell.count, `${cell.dateISO}`);
+  }
+});
+
 test('outPath exists without replace -> clear error', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gitfuscation-'));
   const settings = testSettings(path.join(dir, 'repo'), 10);

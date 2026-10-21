@@ -134,6 +134,28 @@ test('normalization deep-copies; input arrays are not shared', () => {
   assert.equal(norm({}).settings.activity.hourWeights[0], DEFAULT_HOUR_WEIGHTS[0]);
 });
 
+test('signwriter defaults and validation', () => {
+  assert.deepEqual(norm({}).settings.signwriter.levelCounts, [6, 14, 28, 60]);
+  assert.deepEqual(norm({}).settings.signwriter.overrides, {});
+  // valid overrides round-trip
+  const ok = norm({ signwriter: { overrides: { '2025-03-05': 4, '2025-03-06': 0 } } });
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.settings.signwriter.overrides, { '2025-03-05': 4, '2025-03-06': 0 });
+  // invalid forms -> errors
+  for (const raw of [
+    { signwriter: { overrides: { '2025-13-99': 2 } } }, // bad date key
+    { signwriter: { overrides: { '2025-03-05': 9 } } }, // level out of range
+    { signwriter: { overrides: { '2025-03-05': 1.5 } } }, // non-integer
+    { signwriter: { levelCounts: [6, 14, 28] } }, // wrong length
+    { signwriter: { levelCounts: [6, 6, 28, 60] } }, // not strictly increasing
+    { signwriter: { levelCounts: [6.5, 14, 28, 60] } }, // non-integer
+    { signwriter: { levelCounts: [0, 14, 28, 60] } }, // not >= 1
+    { signwriter: { bogus: 1 } },
+  ]) {
+    assert.ok(norm(raw as never).errors.length > 0, JSON.stringify(raw));
+  }
+});
+
 test('non-object or missing settings handle cleanly', () => {
   assert.equal(norm(undefined).errors.length, 0);
   assert.equal(norm(null).errors.length, 0);

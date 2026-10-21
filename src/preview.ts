@@ -33,11 +33,32 @@ function leadDays(weekStart: 'sunday' | 'monday', firstWeekday: number): number 
   return (firstWeekday + 6) % 7; // monday = 1
 }
 
+/**
+ * Absolute thresholds derived from signwriter level counts so a painted cell
+ * renders exactly its painted level regardless of other days' activity:
+ * thresholds sit at the midpoints between adjacent levels (plus L4+1 on top).
+ */
+export function signwriterThresholds(levelCounts: number[]): number[] {
+  const [l1, l2, l3, l4] = levelCounts as [number, number, number, number];
+  return [(l1 + l2) / 2, (l2 + l3) / 2, (l3 + l4) / 2, l4 + 1];
+}
+
 export function previewFor(settings: Settings): PreviewPayload {
   const schedule = generateSchedule(settings);
   const max = schedule.totals.maxDay;
+  // While a banner is painted, render with exact painted levels (absolute
+  // scale, thresholds derived from the level counts) so the chart matches the
+  // intended shades. GitHub's own graph uses a relative scale on push.
+  const paintedDays = Object.keys(settings.signwriter.overrides);
+  const scale: Settings['preview'] =
+    paintedDays.length > 0
+      ? {
+          colorScale: 'absolute',
+          absoluteThresholds: signwriterThresholds(settings.signwriter.levelCounts),
+        }
+      : settings.preview;
   const cells = schedule.days.map((d) => ({
-    level: levelFor(d.count, settings.preview, max),
+    level: levelFor(d.count, scale, max),
     count: d.count,
     dateISO: d.dateKey,
   }));

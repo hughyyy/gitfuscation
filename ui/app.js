@@ -54,6 +54,11 @@ function collectSettings() {
       out[parts[0]][parts[1]] = null;
     }
   }
+  // Painted banner travels with the settings so preview and generate agree.
+  out.signwriter = {
+    levelCounts: signwriterLevelCounts,
+    overrides: Object.fromEntries(painted),
+  };
   return out;
 }
 
@@ -131,7 +136,9 @@ function renderChart(payload, palette, weekStartOverride) {
         const c = cells[idx];
         cell.style.background = palette[c.level] ?? PALETTE_DEFAULT[0];
         cell.title = `${c.dateISO} — ${c.count} commit${c.count === 1 ? '' : 's'}`;
+        cell.dataset.date = c.dateISO;
         if (c.count === 0) cell.classList.add('empty');
+        if (painted.has(c.dateISO)) cell.classList.add('painted');
       } else {
         cell.classList.add('empty');
       }
@@ -177,6 +184,10 @@ function renderLegend(palette) {
 // ---------------------------------------------------------------------------
 
 let debounceTimer = null;
+let signwriterLevelCounts = [6, 14, 28, 60];
+let painted = new Map(); // dateKey -> level 0..4
+let paintEnabled = false;
+let paintLevel = 4;
 
 function schedulePreview() {
   clearTimeout(debounceTimer);
@@ -193,6 +204,48 @@ function schedulePreview() {
       showErrors(e);
     }
   }, 250);
+}
+
+function cellFromEvent(evt) {
+  const cell = evt.target.closest('.cell');
+  if (!cell || !cell.dataset.date) return null;
+  return cell;
+}
+
+function paintCell(cell, level) {
+  if (!paintEnabled) return;
+  const date = cell.dataset.date;
+  painted.set(date, level);
+  if (level === 0) cell.classList.add('empty');
+  else cell.classList.remove('empty');
+  cell.style.background = palette[level] ?? PALETTE_DEFAULT[level] ?? PALETTE_DEFAULT[0];
+  cell.classList.add('painted');
+  schedulePreview();
+}
+
+function bindPainting() {
+  const chart = document.getElementById('chart');
+  let dragging = false;
+  chart.addEventListener('mousedown', (evt) => {
+    if (!paintEnabled || evt.button !== 0) return;
+    dragging = true;
+    const cell = cellFromEvent(evt);
+    if (cell) paintCell(cell, paintLevel);
+  });
+  window.addEventListener('mousemove', (evt) => {
+    if (!dragging) return;
+    const cell = cellFromEvent(evt);
+    if (cell) paintCell(cell, paintLevel);
+  });
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+  });
+  chart.addEventListener('contextmenu', (evt) => {
+    if (!paintEnabled) return;
+    evt.preventDefault();
+    const cell = cellFromEvent(evt);
+    if (cell) paintCell(cell, 0);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +355,24 @@ async function boot() {
       el.addEventListener('change', schedulePreview);
     }
     document.getElementById('generate-btn').addEventListener('click', onGenerate);
+
+    // Signwriter painting
+    signwriterLevelCounts = defaults.signwriter?.levelCounts ?? signwriterLevelCounts;
+    const paintToggle = document.getElementById('paint-enabled');
+    const levelSlider = document.getElementById('paint-level');
+    paintToggle.addEventListener('change', () => {
+      paintEnabled = paintToggle.checked;
+      document.getElementById('chart').classList.toggle('painting', paintEnabled);
+    });
+    levelSlider.addEventListener('input', () => {
+      paintLevel = Number(levelSlider.value);
+      levelSlider.closest('.range-row').querySelector('output').textContent = paintLevel;
+    });
+    document.getElementById('clear-banner-btn').addEventListener('click', () => {
+      painted.clear();
+      schedulePreview();
+    });
+    bindPainting();
 
     schedulePreview();
   } catch (e) {

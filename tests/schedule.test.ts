@@ -244,6 +244,44 @@ test('absolute color scale uses thresholds in order', () => {
   assert.equal(levelFor(30, s.preview, 999), 4);
 });
 
+test('signwriter overrides replace counts exactly; level 0 erases', () => {
+  const s = settings((x) => {
+    x.activity.burstProbability = 0;
+    x.signwriter.overrides = {
+      '2025-10-01': 4, // first day, window start
+      '2025-10-02': 1,
+      '2025-10-03': 0, // erase whatever was generated
+    };
+  });
+  const schedule = generateSchedule(s);
+  const byKey = new Map(schedule.days.map((d) => [d.dateKey, d.count]));
+  assert.equal(byKey.get('2025-10-01'), 60); // levelCounts[3]
+  assert.equal(byKey.get('2025-10-02'), 6); // levelCounts[0]
+  assert.equal(byKey.get('2025-10-03'), 0);
+  // Deterministic with the same overrides (parity with preview/generate).
+  assert.deepEqual(generateSchedule(s).days, schedule.days);
+});
+
+test('signwriter overrides outside the window are ignored', () => {
+  const s = settings((x) => {
+    x.signwriter.overrides = { '1999-01-01': 4, '2035-12-31': 2 };
+  });
+  const schedule = generateSchedule(s);
+  const base = generateSchedule(settings());
+  assert.deepEqual(schedule.days.map((d) => d.count), base.days.map((d) => d.count));
+});
+
+test('signwriter totals reflect painted counts', () => {
+  const s = settings((x) => {
+    x.activity.burstProbability = 0;
+    x.signwriter.overrides = { '2025-10-05': 4 };
+  });
+  const schedule = generateSchedule(s);
+  const base = generateSchedule(settings((z) => (z.activity.burstProbability = 0)));
+  const delta = schedule.totals.commits - base.totals.commits;
+  assert.equal(delta, 60 - base.days.find((d) => d.dateKey === '2025-10-05')!.count);
+});
+
 test('tz offset keeps evenings on the intended calendar day', () => {
   const s = settings();
   s.output.tzOffset = -5; // e.g. US Eastern

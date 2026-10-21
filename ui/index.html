@@ -103,6 +103,18 @@
         </label>
       </section>
 
+      <section id="signwriter-panel">
+        <h2>Signwriter</h2>
+        <label class="check"><input id="paint-enabled" type="checkbox" /> Paint mode (click/drag) — right-click erases</label>
+        <label>Brush level
+          <span class="range-row"><input id="paint-level" type="range" min="0" max="4" step="1" value="4" /><output>4</output></span>
+        </label>
+        <p class="paint-hint">Paint shades onto the chart to draw a banner — the repo
+          will contain exactly the painted pattern. GitHub re-colors with its own
+          relative scale when pushed; the preview below is shade-accurate.</p>
+        <button id="clear-banner-btn" class="btn secondary" type="button">Erase all painted cells</button>
+      </section>
+
       <button id="generate-btn" type="button">Generate repo</button>
       <p id="status-line" class="status"></p>
     </aside>

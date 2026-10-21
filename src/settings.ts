@@ -57,13 +57,22 @@ export interface PreviewSettings {
   absoluteThresholds: number[]; // length 4
 }
 
+/** Signwriter: paint arbitrary levels onto specific days (banner art). */
+export interface SignwriterSettings {
+  levelCounts: number[]; // [L1..L4] commits per painted level, strictly increasing
+  overrides: Record<string, number>; // dateKey 'YYYY-MM-DD' -> level 0..4
+}
+
 export interface Settings {
   output: OutputSettings;
   timeline: TimelineSettings;
   activity: ActivitySettings;
   content: ContentSettings;
   preview: PreviewSettings;
+  signwriter: SignwriterSettings;
 }
+
+export const DEFAULT_SIGNWRITER_LEVEL_COUNTS = [6, 14, 28, 60];
 
 export type IdentitySource = 'env' | 'git' | 'fallback';
 
@@ -195,6 +204,10 @@ export function defaultSettings(
       colorScale: 'github',
       absoluteThresholds: [...DEFAULT_ABSOLUTE_THRESHOLDS],
     },
+    signwriter: {
+      levelCounts: [...DEFAULT_SIGNWRITER_LEVEL_COUNTS],
+      overrides: {},
+    },
   };
 }
 
@@ -298,7 +311,7 @@ export function normalizeSettings(raw: unknown, runtime: RuntimeDefaults = compu
   }
 
   // Unknown top-level keys
-  const knownGroups = ['output', 'timeline', 'activity', 'content', 'preview'];
+  const knownGroups = ['output', 'timeline', 'activity', 'content', 'preview', 'signwriter'];
   for (const k of Object.keys(raw)) {
     if (!knownGroups.includes(k)) err(col, `settings.${k}`, 'unknown setting');
   }
@@ -450,6 +463,53 @@ export function normalizeSettings(raw: unknown, runtime: RuntimeDefaults = compu
         err(col, 'preview.absoluteThresholds', 'thresholds must be >= 0');
       }
       s.preview.absoluteThresholds = th;
+    }
+  }
+
+  // signwriter
+  const sw = raw.signwriter;
+  if (sw !== undefined) {
+    if (!isRecord(sw)) err(col, 'signwriter', 'expected an object');
+    else {
+      for (const k of Object.keys(sw)) {
+        if (!['levelCounts', 'overrides'].includes(k)) {
+          err(col, `signwriter.${k}`, 'unknown setting');
+        }
+      }
+      const lc = numArray(col, 'signwriter.levelCounts', sw.levelCounts, s.signwriter.levelCounts, 4);
+      if (sw.levelCounts !== undefined) {
+        const ints = lc.every((x) => Number.isInteger(x) && x >= 1);
+        if (!ints) err(col, 'signwriter.levelCounts', 'must be 4 positive integers');
+        for (let i = 1; i < lc.length; i += 1) {
+          if (lc[i] !== undefined && lc[i - 1] !== undefined && lc[i] <= lc[i - 1]) {
+            err(col, 'signwriter.levelCounts', 'must be strictly increasing');
+            break;
+          }
+        }
+      }
+      s.signwriter.levelCounts = lc;
+      if (sw.overrides !== undefined) {
+        if (!isRecord(sw.overrides)) {
+          err(col, 'signwriter.overrides', 'expected an object of dateKey -> level');
+        } else {
+          const clean: Record<string, number> = {};
+          for (const [dateKey, level] of Object.entries(sw.overrides)) {
+            if (
+              !/^\d{4}-\d{2}-\d{2}$/.test(dateKey) ||
+              Number.isNaN(Date.parse(`${dateKey}T00:00:00Z`))
+            ) {
+              err(col, `signwriter.overrides.${dateKey}`, 'expected a valid YYYY-MM-DD key');
+              continue;
+            }
+            if (typeof level !== 'number' || !Number.isInteger(level) || level < 0 || level > 4) {
+              err(col, `signwriter.overrides.${dateKey}`, 'level must be an integer 0..4');
+              continue;
+            }
+            clean[dateKey] = level;
+          }
+          s.signwriter.overrides = clean;
+        }
+      }
     }
   }
 

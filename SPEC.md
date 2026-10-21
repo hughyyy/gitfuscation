@@ -174,6 +174,22 @@ did not come from `git config user.email`.
 |`colorScale`|enum `github`/`absolute`|`github`|Level computation, §5.1|
 |`absoluteThresholds`|array[4]|`[1, 3, 8, 20]`|Used when `colorScale=absolute`: count ≥ t_i ⇒ level i+1|
 
+### 3.6 `signwriter` (banner painting)
+
+|Key|Type|Default|Meaning|
+|---|---|---|---|
+|`levelCounts`|array[4]|`[6, 14, 28, 60]`|Commit counts produced by painting levels 1–4; strictly increasing ints ≤ `maxCommitsPerDay`|
+|`overrides`|map dateKey→level|`{}`|`YYYY-MM-DD` → painted level 0..4 (0 erases the day)|
+
+Painting replaces those days' generated counts before timestamp generation (§4.1);
+level 0 zeroes the day. The preview/generate paths share the same overrides, so
+the painted banner IS the history. While any override is set, `previewFor`
+renders with an absolute scale whose thresholds sit at the midpoints of the
+painted counts (§5.1), so every painted cell shows exactly its intended shade.
+GitHub's own contribution graph re-colors by its relative algorithm on push —
+the preview is shade-accurate; GitHub fidelity depends on keeping painted counts
+above the natural background.
+
 ## 4. Day 1 — Activity generator
 
 ### 4.1 Schedule algorithm (`schedule.ts`)

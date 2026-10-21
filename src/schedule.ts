@@ -335,6 +335,19 @@ export function generateSchedule(settings: Settings): Schedule {
       settings.activity.maxCommitsPerDay,
     );
   }
+  // Signwriter: painted levels replace the generated counts for those days
+  // (level 0 erases -> no commits). Applied identically for preview/generate
+  // so the painted banner is what the repo contains.
+  const dayIndexByKey = new Map<string, number>();
+  for (let i = 0; i < durationDays; i += 1) {
+    dayIndexByKey.set(dateKeyOfEpoch(startEpoch + i * 86400, tz), i);
+  }
+  const levelCounts = settings.signwriter.levelCounts;
+  for (const [dateKey, level] of Object.entries(settings.signwriter.overrides)) {
+    const idx = dayIndexByKey.get(dateKey);
+    if (idx === undefined) continue; // outside the window (e.g. after a timeline change)
+    counts[idx] = level === 0 ? 0 : (levelCounts[level - 1] ?? levelCounts[levelCounts.length - 1] ?? 40);
+  }
 
   const days: DayInfo[] = [];
   const commits: CommitInfo[] = [];
