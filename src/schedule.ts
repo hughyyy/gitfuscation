@@ -453,7 +453,8 @@ export function generateSchedule(settings: Settings): Schedule {
 // Preview levels (SPEC §5.1) — kept here so preview parity is cell-exact.
 // ---------------------------------------------------------------------------
 
-export const LEVEL_COLORS = ['#21262d', '#9be9a8', '#40c463', '#30a14e', '#216e39'];
+/** Empty = background; green dark-to-bright as commits increase (GitHub 2023+). */
+export const LEVEL_COLORS = ['#21262d', '#0e4429', '#006d32', '#26a641', '#39d353'];
 
 /** GitHub-style relative level: 0 | 1 + floor(4*count/max), count>0 => >=1. */
 export function githubLevel(count: number, max: number): number {
