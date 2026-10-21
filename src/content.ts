@@ -60,6 +60,13 @@ const BASE_PATHS = [
   'tests/smoke.md', 'tests/perf.md', 'tests/fixtures.md',
 ] as const;
 
+/**
+ * Files owned by the generator itself (e.g. the contribution-pattern README):
+ * seeded once, never picked for random content edits.
+ */
+export const STATIC_CONTENT_FILES = ['README.md'] as const;
+const STATIC_SET: ReadonlySet<string> = new Set(STATIC_CONTENT_FILES);
+
 // ---------------------------------------------------------------------------
 // Session
 // ---------------------------------------------------------------------------
@@ -219,7 +226,7 @@ export function applyCommit(session: ContentSession, dateKey: string): string[] 
   const howManyRoll = rng();
   const howMany =
     howManyRoll < 0.82 ? 1 : howManyRoll < 0.94 ? 2 : howManyRoll < 0.98 ? 3 : 4;
-  const fileList = [...session.files.keys()];
+  const fileList = [...session.files.keys()].filter((p) => !STATIC_SET.has(p));
   const weights = fileList.map((p) => {
     const age = session.commitIndex - (session.lastTouch.get(p) ?? 0);
     return Math.max(0.3, 1 / (1 + age / 120));

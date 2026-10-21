@@ -88,6 +88,7 @@ CLI entry points (`node src/main.ts …`):
 | `repos [--root d]` | List git repos under a root directory |
 | `authors <path>` | Summarize a repo's authorship (identities, days, counts) |
 | `reauth <path> [--dry-run] [--map f]` | Reattribute authorship using the identity map |
+| `readme <path> [--commit]` | Write (optionally commit) the pattern README for a repo |
 
 ### Core invariant
 
@@ -260,7 +261,10 @@ author/committer identity and dates supplied by environment variables.
 2. Build the initial corpus: `fileCount` files at seed content (see §4.4).
    Record `state = {path: blobOid}` and compute the initial tree.
 3. **Initial commit**: all files, `author_date = startDate 00:00 tz`, message
-   `chore: initial scaffold`.
+   `chore: initial scaffold`. The corpus includes a static `README.md` rendered
+   from the schedule (ASCII contribution chart, §9) — seeded at day 0 and
+   never touched by the random content stream, so the pattern document is part
+   of the history from the first commit.
 4. For each scheduled commit in chronological order:
 
    - Update content: choose `1..filesPerCommit` files (weighted so active files

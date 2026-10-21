@@ -2,6 +2,7 @@
 // main.ts — CLI: serve | preview | generate | repos | authors | reauth.
 
 import { readFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeSettings, computeRuntimeDefaults, type Settings } from './settings.ts';
 import { previewFor, renderAscii } from './preview.ts';
@@ -12,6 +13,7 @@ import { inspectAuthors } from './authors.ts';
 import { loadIdentityMap, type IdentityMap } from './identity-map.ts';
 import { planReauth, executeReauth } from './reauth.ts';
 import { runGit } from './gitutil.ts';
+import { chartFromRepo, patternMarkdown } from './pattern.ts';
 
 const USAGE = `gitfuscation — generate synthetic activity history, paint contribution art, and repair commit attribution
 
@@ -24,6 +26,7 @@ Commands:
   repos [--root d]               List git repos under a root directory
   authors <path>                 Summarize authorship of a repo
   reauth <path> [-> options]     Reattribute authorship in a repo (see below)
+  readme <path> [--commit]       Write the pattern README for a repo
 
 Options:
   --config <path>     JSON settings file (optional: falls back to defaults)
@@ -46,6 +49,7 @@ interface CliArgs {
   dryRun?: boolean;
   noCommitter?: boolean;
   noTags?: boolean;
+  commit?: boolean;
   path?: string;
 }
 
@@ -61,6 +65,7 @@ function parseArgs(argv: string[]): { cmd: string; args: CliArgs } {
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--no-committer') args.noCommitter = true;
     else if (argv[i] === '--no-tags') args.noTags = true;
+    else if (argv[i] === '--commit') args.commit = true;
     else if (argv[i] === '-h' || argv[i] === '--help') {
       console.log(USAGE);
       process.exit(0);
@@ -169,6 +174,35 @@ async function main(): Promise<void> {
       console.log(
         `${a.identity.padEnd(40)} ${String(a.count).padStart(4)} commits (${share}%)  activeDays=${a.days.length}  first=${new Date(a.first * 1000).toISOString().slice(0, 10)} last=${new Date(a.last * 1000).toISOString().slice(0, 10)}`,
       );
+    }
+    return;
+  }
+
+  if (cmd === 'readme') {
+    const repoPath = args.path ?? '';
+    if (repoPath === '') {
+      console.error('readme: missing <path> argument');
+      process.exit(2);
+    }
+    await runGit(['rev-parse', '--is-inside-work-tree'], { cwd: repoPath });
+    const { payload, author, email } = await chartFromRepo(repoPath);
+    const title = path.basename(path.resolve(repoPath));
+    const markdown = patternMarkdown(payload, title, author, email);
+    const target = path.join(repoPath, 'README.md');
+    await writeFile(target, markdown, 'utf8');
+    console.log(`wrote ${target} (${markdown.length} bytes)`);
+    if (args.commit) {
+      await runGit(['add', 'README.md'], { cwd: repoPath });
+      await runGit(['commit', '-m', 'docs: add contribution pattern chart'], {
+        cwd: repoPath,
+        env: {
+          GIT_AUTHOR_NAME: author,
+          GIT_AUTHOR_EMAIL: email,
+          GIT_COMMITTER_NAME: author,
+          GIT_COMMITTER_EMAIL: email,
+        },
+      });
+      console.log(`committed as ${author} <${email}>`);
     }
     return;
   }

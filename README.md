@@ -20,7 +20,11 @@ node src/main.ts serve
 ```
 
 Tweak the settings on the left — the chart re-renders live. When it looks
-right, click **Generate repo**.
+right, click **Generate repo**. Every generated repo ships with a static
+`README.md` containing the ASCII contribution chart, so the pattern (including
+a painted banner) is visible on GitHub before anyone scrolls the graph. For an
+existing repo, `node src/main.ts readme <path> --commit` regenerates it from
+the actual history.
 
 ### CLI
 
