@@ -85,6 +85,9 @@ CLI entry points (`node src/main.ts …`):
 | `serve` | Start web UI at `http://127.0.0.1:8315` |
 | `preview --config c.json` | Print ASCII contribution chart to the terminal |
 | `generate --config c.json` | Generate the repo from a config, print summary |
+| `repos [--root d]` | List git repos under a root directory |
+| `authors <path>` | Summarize a repo's authorship (identities, days, counts) |
+| `reauth <path> [--dry-run] [--map f]` | Reattribute authorship using the identity map |
 
 ### Core invariant
 

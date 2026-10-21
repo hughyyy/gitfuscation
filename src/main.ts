@@ -1,32 +1,52 @@
 #!/usr/bin/env node
-// main.ts — CLI: serve | preview | generate (SPEC §2).
+// main.ts — CLI: serve | preview | generate | repos | authors | reauth.
 
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { normalizeSettings, computeRuntimeDefaults, type Settings } from './settings.ts';
 import { previewFor, renderAscii } from './preview.ts';
 import { generateRepo } from './materialize.ts';
 import { startServer } from './server.ts';
+import { scanRepos } from './repoindex.ts';
+import { inspectAuthors } from './authors.ts';
+import { loadIdentityMap, type IdentityMap } from './identity-map.ts';
+import { planReauth, executeReauth } from './reauth.ts';
+import { runGit } from './gitutil.ts';
 
-const USAGE = `gitfuscation — generate synthetic activity history
+const USAGE = `gitfuscation — generate synthetic activity history, paint contribution art, and repair commit attribution
 
 Usage: node src/main.ts <command> [options]
 
 Commands:
-  serve                    Start the web UI at http://127.0.0.1:8315
-  preview [--config f]     Print the contribution chart for settings (ASCII)
-  generate [--config f]    Generate the history repo from settings
+  serve                          Start the web UI at http://127.0.0.1:8315
+  preview [--config f]           Print the contribution chart for settings (ASCII)
+  generate [--config f]          Generate the history repo from settings
+  repos [--root d]               List git repos under a root directory
+  authors <path>                 Summarize authorship of a repo
+  reauth <path> [-> options]     Reattribute authorship in a repo (see below)
 
 Options:
-  --config <path>  JSON settings file (optional: falls back to defaults)
-  --port <n>       serve: listen port (default 8315)
-  --host <h>       serve: listen host (default 127.0.0.1)
-  -h, --help       Show this help
+  --config <path>     JSON settings file (optional: falls back to defaults)
+  --port <n>          serve: listen port (default 8315)
+  --host <h>          serve: listen host (default 127.0.0.1)
+  --root <dir>        repos: scan root (default parent of this project)
+  --map <file>        reauth: identity map JSON (default identity-map.json)
+  --dry-run           reauth: plan only, write nothing
+  --no-committer      reauth: leave committer identity unchanged
+  --no-tags           reauth: leave tags untouched
+  -h, --help          Show this help
 `;
 
 interface CliArgs {
   config?: string;
   port?: number;
   host?: string;
+  root?: string;
+  map?: string;
+  dryRun?: boolean;
+  noCommitter?: boolean;
+  noTags?: boolean;
+  path?: string;
 }
 
 function parseArgs(argv: string[]): { cmd: string; args: CliArgs } {
@@ -36,11 +56,17 @@ function parseArgs(argv: string[]): { cmd: string; args: CliArgs } {
     if (argv[i] === '--config') args.config = argv[++i];
     else if (argv[i] === '--port') args.port = Number(argv[++i]);
     else if (argv[i] === '--host') args.host = argv[++i];
+    else if (argv[i] === '--root') args.root = argv[++i];
+    else if (argv[i] === '--map') args.map = argv[++i];
+    else if (argv[i] === '--dry-run') args.dryRun = true;
+    else if (argv[i] === '--no-committer') args.noCommitter = true;
+    else if (argv[i] === '--no-tags') args.noTags = true;
     else if (argv[i] === '-h' || argv[i] === '--help') {
       console.log(USAGE);
       process.exit(0);
     }
   }
+  args.path = argv[1] && !argv[1].startsWith('--') ? argv[1] : undefined;
   return { cmd, args };
 }
 
@@ -115,8 +141,71 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === 'repos') {
+    const root = args.root ?? resolveRepoRootCli();
+    const repos = await scanRepos(root);
+    console.log(`repos under ${root}: ${repos.length}`);
+    for (const r of repos) {
+      const authors = r.topAuthors.map((a) => `${a.identity}×${a.count}`).join(', ') || '—';
+      console.log(
+        `${r.rel}  commits=${r.commits} heads=${r.heads} last=${new Date(r.lastActivity * 1000).toISOString().slice(0, 10)}  ${authors}`,
+      );
+    }
+    return;
+  }
+
+  if (cmd === 'authors') {
+    const repoPath = args.path ?? '';
+    if (repoPath === '') {
+      console.error('authors: missing <path> argument');
+      process.exit(2);
+    }
+    await runGit(['rev-parse', '--is-inside-work-tree'], { cwd: repoPath });
+    const repo = await inspectAuthors(repoPath);
+    console.log(`# ${repo.name}  (${repo.path})`);
+    console.log(`head: ${repo.head}  branches: ${repo.branches.join(', ')}  tags: ${repo.tagCount}  commits: ${repo.commitCount}`);
+    for (const a of repo.authors) {
+      const share = ((a.count / Math.max(1, repo.commitCount)) * 100).toFixed(0);
+      console.log(
+        `${a.identity.padEnd(40)} ${String(a.count).padStart(4)} commits (${share}%)  activeDays=${a.days.length}  first=${new Date(a.first * 1000).toISOString().slice(0, 10)} last=${new Date(a.last * 1000).toISOString().slice(0, 10)}`,
+      );
+    }
+    return;
+  }
+
+  if (cmd === 'reauth') {
+    const repoPath = args.path ?? '';
+    if (repoPath === '') {
+      console.error('reauth: missing <path> argument');
+      process.exit(2);
+    }
+    const { map, errors } = loadIdentityMap(args.map);
+    if (errors.length > 0) {
+      console.error(`identity map: ${errors.join('; ')}`);
+      process.exit(2);
+    }
+    const identityMap: IdentityMap = map;
+    if (map.rows.length === 0 && map.fallback === null) {
+      console.error('identity map is empty — add rows or a fallback first (see identity-map.json)');
+      process.exit(2);
+    }
+    const opts = {
+      rewriteCommitter: !args.noCommitter,
+      includeTags: !args.noTags,
+    };
+    const result = args.dryRun
+      ? await planReauth(repoPath, identityMap, opts)
+      : await executeReauth(repoPath, identityMap, opts);
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
   console.log(USAGE);
   process.exit(cmd === '' ? 1 : 0);
+}
+
+function resolveRepoRootCli(): string {
+  return process.env.GITFUSCATION_REPO_ROOT ?? path.dirname(process.cwd());
 }
 
 void main();

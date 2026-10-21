@@ -2,7 +2,7 @@
 // Single-flight generation: concurrent /api/generate gets HTTP 409.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { URL } from 'node:url';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,17 @@ import { defaultSettings, normalizeSettings, computeRuntimeDefaults, type Settin
 import { previewFor } from './preview.ts';
 import { generateRepo } from './materialize.ts';
 import { LEVEL_COLORS } from './schedule.ts';
+import { scanRepos } from './repoindex.ts';
+import { inspectAuthors } from './authors.ts';
+import {
+  loadIdentityMap,
+  saveIdentityMap,
+  parseIdentityMap,
+  DEFAULT_IDENTITY_MAP_PATH,
+  type IdentityMap,
+} from './identity-map.ts';
+import { planReauth, executeReauth } from './reauth.ts';
+import { runGit } from './gitutil.ts';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'ui');
 const MAX_BODY = 1 * 1024 * 1024;
@@ -47,6 +58,31 @@ async function readBody(req: IncomingMessage): Promise<string> {
     chunks.push(buf);
   }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readJsonBody(req: IncomingMessage, res: ServerResponse): Promise<unknown | null> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readBody(req));
+  } catch {
+    sendJson(res, 400, { error: 'invalid JSON body' });
+    return null;
+  }
+  return raw;
+}
+
+/** Repo scan root: env GITFUSCATION_REPO_ROOT, else the parent of this project. */
+function resolveRepoRoot(): string {
+  return process.env.GITFUSCATION_REPO_ROOT ?? path.resolve(process.cwd(), '..');
+}
+
+async function isWorktree(repoPath: string): Promise<boolean> {
+  try {
+    const out = await runGit(['rev-parse', '--is-inside-work-tree'], { cwd: repoPath });
+    return out.trim() === 'true';
+  } catch {
+    return false;
+  }
 }
 
 const MIME: Record<string, string> = {
@@ -112,6 +148,107 @@ export function startServer(opts: ServerOptions = {}): {
           },
           colorPalette: LEVEL_COLORS,
         });
+        return;
+      }
+
+      // --- Authorship: repo list, inspection, identity map, reauth ---
+      if (req.method === 'GET' && url.pathname === '/api/repos') {
+        const asked = url.searchParams.get('root');
+        const trimmed = asked?.trim() ?? '';
+        const candidate = trimmed !== '' ? path.resolve(trimmed) : resolveRepoRoot();
+        try {
+          const st = await stat(candidate);
+          if (!st.isDirectory()) {
+            sendJson(res, 400, { error: `not a directory: ${candidate}` });
+            return;
+          }
+        } catch {
+          sendJson(res, 400, { error: `no such directory: ${candidate}` });
+          return;
+        }
+        try {
+          const repos = await scanRepos(candidate);
+          sendJson(res, 200, { root: candidate, repos });
+        } catch (e) {
+          sendJson(res, 500, { error: (e as Error).message });
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/repo/authors') {
+        const repoPath = url.searchParams.get('path');
+        if (repoPath === null) {
+          sendJson(res, 400, { error: 'missing path query parameter' });
+          return;
+        }
+        if (!(await isWorktree(repoPath))) {
+          sendJson(res, 400, { error: `not a git worktree: ${repoPath}` });
+          return;
+        }
+        try {
+          sendJson(res, 200, await inspectAuthors(repoPath));
+        } catch (e) {
+          sendJson(res, 500, { error: (e as Error).message });
+        }
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/identity-map') {
+        const { map, errors } = loadIdentityMap();
+        if (errors.length > 0) {
+          sendJson(res, 500, { errors });
+          return;
+        }
+        sendJson(res, 200, { map, path: DEFAULT_IDENTITY_MAP_PATH });
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/identity-map') {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(await readBody(req));
+        } catch {
+          sendJson(res, 400, { error: 'invalid JSON body' });
+          return;
+        }
+        const { map, errors } = parseIdentityMap(raw);
+        if (errors.length > 0) {
+          sendJson(res, 400, { errors });
+          return;
+        }
+        saveIdentityMap(map);
+        sendJson(res, 200, { map });
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname.startsWith('/api/repo/reauth')) {
+        const execute = url.pathname.endsWith('/execute');
+        const body = await readJsonBody(req, res);
+        if (body === null) return;
+        const repoPath = (body as Record<string, unknown>).path;
+        if (typeof repoPath !== 'string' || !(await isWorktree(repoPath))) {
+          sendJson(res, 400, { error: `not a git worktree: ${String(repoPath)}` });
+          return;
+        }
+        const { map, errors } = parseIdentityMap((body as Record<string, unknown>).identityMap);
+        if (errors.length > 0) {
+          sendJson(res, 400, { errors });
+          return;
+        }
+        const opts = {
+          rewriteCommitter: (body as Record<string, unknown>).rewriteCommitter as boolean | undefined,
+          includeTags: (body as Record<string, unknown>).includeTags as boolean | undefined,
+        };
+        const mapObj: IdentityMap = map;
+        try {
+          if (execute) {
+            sendJson(res, 200, await executeReauth(repoPath, mapObj, opts));
+          } else {
+            sendJson(res, 200, await planReauth(repoPath, mapObj, opts));
+          }
+        } catch (e) {
+          sendJson(res, 400, { error: (e as Error).message });
+        }
         return;
       }
       if (req.method === 'GET' && url.pathname === '/api/status') {

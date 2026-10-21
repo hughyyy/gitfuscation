@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gitfuscation — repositories</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .nav { display: flex; gap: 4px; margin-left: auto; }
+    .nav a {
+      color: var(--text); text-decoration: none; font-size: 13px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+    }
+    .nav a.active { border-color: var(--accent); color: var(--accent); }
+    .toolbar { display: flex; gap: 10px; align-items: center; padding: 14px 20px 0; }
+    .toolbar input { width: 320px; }
+    table.repos { width: 100%; border-collapse: collapse; }
+    table.repos th, table.repos td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    table.repos th { color: var(--dim); font-weight: 500; }
+    a.inspect { color: var(--accent); cursor: pointer; }
+    #detail { margin-top: 16px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .author-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+    .author-row .bar { height: 8px; background: #21262d; border-radius: 4px; flex: 1; min-width: 80px; }
+    .author-row .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+    .author-row label { display: flex; flex-direction: row; align-items: center; gap: 6px; margin: 0; cursor: pointer; }
+    .map-row { display: grid; grid-template-columns: 90px 1fr 1fr 1fr 28px; gap: 6px; margin-bottom: 6px; }
+    .map-row select, .map-row input { width: 100%; }
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
+    .btn.danger { background: var(--danger); }
+    .btn:disabled { opacity: 0.45; cursor: wait; }
+    .btn.secondary { background: #21262d; color: var(--text); border: 1px solid var(--border); }
+    .rewrite-note { color: var(--warn); font-size: 12px; margin-top: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .plan-table td, .plan-table th { padding: 4px 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>gitfuscation</h1>
+    <p class="tagline">inspect and reattribute authorship across your repos</p>
+    <nav class="nav">
+      <a href="/" id="nav-generator">Generator</a>
+      <a href="/repos.html" id="nav-repos" class="active">Repositories</a>
+    </nav>
+  </header>
+
+  <main style="grid-template-columns: 1fr; max-width: 1100px; margin: 0 auto;">
+    <div class="toolbar">
+      <label>Repos root
+        <input id="root-input" type="text" />
+      </label>
+      <button id="refresh-btn" class="btn secondary">Refresh</button>
+      <span id="scan-status" class="dim"></span>
+    </div>
+
+    <div id="repo-list" class="grid2"></div>
+
+    <div id="detail" class="hidden">
+      <div id="detail-meta"></div>
+      <div class="grid2">
+        <section>
+          <h2>Authors</h2>
+          <div id="authors"></div>
+        </section>
+        <section>
+          <h2>Timeline</h2>
+          <div id="heatmap"></div>
+        </section>
+      </div>
+      <div class="grid2">
+        <section>
+          <h2>Identity map</h2>
+          <p class="dim" style="font-size:12px;margin:0 0 8px;">
+            Global reattribution rules (saved to <span class="mono">identity-map.json</span>).
+            First match wins; fallback applies to any author not matched.
+          </p>
+          <div id="map-rows"></div>
+          <button id="add-row-btn" class="btn secondary">+ rule</button>
+          <div style="margin-top:8px;">
+            <label class="check"><input id="fallback-enable" type="checkbox" /> Fallback identity</label>
+            <div id="fallback-row" class="map-row hidden" style="margin-top:6px;">
+              <span></span><input id="fallback-name" type="text" placeholder="Name" /><input id="fallback-email" type="text" placeholder="Email" />
+            </div>
+          </div>
+          <button id="save-map-btn" class="btn" style="margin-top:8px;">Save identity map</button>
+          <p id="map-status" class="status"></p>
+        </section>
+        <section>
+          <h2>Reattribute</h2>
+          <label class="check"><input id="rewrite-committer" type="checkbox" checked /> Reattribute committer identity too</label>
+          <label class="check"><input id="include-tags" type="checkbox" checked /> Retarget tags</label>
+          <p class="rewrite-note">Reattribution changes commit SHAs (identity only — dates and content are preserved).</p>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="plan-btn" class="btn secondary">Plan (dry run)</button>
+            <button id="execute-btn" class="btn danger" disabled>Execute</button>
+          </div>
+          <label class="check" style="margin-top:8px;"><input id="confirm-sha" type="checkbox" /> I understand SHAs will change and I can restore via <span class="mono">refs/backup/*</span></label>
+          <div id="plan-out" style="margin-top:10px;"></div>
+          <div id="reauth-status" class="status"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="/repos.js"></script>
+</body>
+</html>

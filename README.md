@@ -77,3 +77,49 @@ The full settings schema (with defaults) lives in SPEC §3. Highlights:
 | `output.replace` | false | Allow overwriting an existing out path |
 | `preview.colorScale` | github | `github` (relative) or `absolute` thresholds |
 
+## Repositories: inspect authorship + reattribution
+
+Inspect any repo under a root directory (default: the parent of this project —
+e.g. `Source/`), see its author breakdown and timeline, and reattribute commits
+to the right GitHub identity. Useful for correcting machine-local agentic
+coding that committed under a box identity (e.g. `bernie <bernie@localhost>`):
+
+```
+node src/main.ts serve            # → open http://127.0.0.1:8315 → Repositories
+node src/main.ts authors /path/to/repo          # CLI summary
+node src/main.ts reauth /path/to/repo --dry-run  # plan only
+node src/main.ts reauth /path/to/repo            # apply the identity map
+```
+
+Identity mapping lives in `identity-map.json` (gitignored, personal config):
+
+```json
+{
+  "rows": [
+    { "from": { "match": "bernie@localhost", "mode": "email" },
+      "to":   { "name": "Your Name", "email": "you@users.noreply.github.com" } }
+  ],
+  "fallback": { "name": "Your Name", "email": "you@users.noreply.github.com" }
+}
+```
+
+Match modes: `email`, `name`, or `full` (`Name <email>`). First match wins;
+`fallback` catches every author not matched (useful when the whole box was one
+person under several emails).
+
+**How it works and how to stay safe:** commits are rebuilt object-by-object —
+same tree, same author/committer **dates**, same messages — only the identity
+lines change, and parent links are remapped so topology (merges, branches) is
+preserved. Annotated tags are retargeted. Before touching anything the tool
+refuses dirty worktrees, creates `refs/backup/*` pointing at the original tips
+(restore with `git update-ref refs/heads/main refs/backup/heads/main`), expires
+reflogs, and runs `git fsck`. SHAs change — force-push if the repo has a
+remote:
+
+```
+git push --force --all origin
+git push --force --tags origin   # if tags moved
+```
+
+Note: only local `refs/heads` + `refs/tags` are rewritten; remote-tracking refs
+(`refs/remotes/*`) keep the old history until you fetch after the force-push.

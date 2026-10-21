@@ -3,3 +3,6 @@ generated/
 node_modules/
 __pycache__/
 *.pyc
+
+# Personal reattribution config (author identity is machine-specific)
+identity-map.json
