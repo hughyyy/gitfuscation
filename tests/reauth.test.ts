@@ -7,7 +7,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runGit } from '../src/gitutil.ts';
-import { planReauth, executeReauth } from '../src/reauth.ts';
+import { planReauth, executeReauth, topoOrder } from '../src/reauth.ts';
 import { parseIdentityMap, mapIdentity } from '../src/identity-map.ts';
 import { buildFixture, type Fixture } from './fixture.ts';
 
@@ -59,6 +59,31 @@ async function setup(): Promise<{ dir: string; fixture: Fixture }> {
   const fixture = await buildFixture(root);
   return { dir: fixture.dir, fixture };
 }
+
+test('topoOrder handles deep linear histories without stack overflow', () => {
+  const n = 25000;
+  const parents = new Map<string, string[]>();
+  for (let i = 1; i < n; i += 1) {
+    parents.set(`c${i}`, [`c${i - 1}`]);
+  }
+  parents.set('c0', []);
+  const order = topoOrder(parents, [`c${n - 1}`]);
+  assert.equal(order.length, n);
+  assert.equal(order[0], 'c0');
+  assert.equal(order[n - 1], `c${n - 1}`);
+});
+
+test('topoOrder preserves ancestor-first order across merges', () => {
+  // diamond: A -> B -> D, A -> C -> D
+  const parents = new Map<string, string[]>([
+    ['D', ['B', 'C']],
+    ['B', ['A']],
+    ['C', ['A']],
+    ['A', []],
+  ]);
+  const order = topoOrder(parents, ['D']);
+  assert.deepEqual(order, ['A', 'B', 'C', 'D']);
+});
 
 test('dry-run reports exactly the identity changes', async () => {
   const { dir, fixture } = await setup();

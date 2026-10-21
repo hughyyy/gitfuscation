@@ -135,17 +135,37 @@ async function loadParents(repoPath: string, refs: CommitRef[]): Promise<Map<str
   return parents;
 }
 
-/** Ancestor-first order (parents before children) via DFS over shared commits. */
-function topoOrder(parents: Map<string, string[]>, tips: string[]): string[] {
+/**
+ * Ancestor-first order (parents before children) via iterative DFS post-order
+ * over shared commits. Each tip's subtree is fully drained before the next tip
+ * starts, mirroring the original recursion (marking a node visited at push is
+ * only safe when its whole subtree completes before any other walk can
+ * reference it). Iterative: deep linear histories must not blow the stack.
+ */
+export function topoOrder(parents: Map<string, string[]>, tips: string[]): string[] {
   const order: string[] = [];
   const visited = new Set<string>();
-  const visit = (oid: string): void => {
-    if (visited.has(oid)) return;
-    visited.add(oid);
-    for (const p of parents.get(oid) ?? []) visit(p);
-    order.push(oid);
-  };
-  for (const tip of tips) visit(tip);
+  const stack: Array<{ oid: string; next: number }> = [];
+  for (const tip of tips) {
+    if (visited.has(tip)) continue;
+    visited.add(tip);
+    stack.push({ oid: tip, next: 0 });
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1] as { oid: string; next: number };
+      const ps = parents.get(top.oid) ?? [];
+      if (top.next < ps.length) {
+        const p = ps[top.next] as string;
+        top.next += 1;
+        if (!visited.has(p)) {
+          visited.add(p);
+          stack.push({ oid: p, next: 0 });
+        }
+      } else {
+        order.push(top.oid);
+        stack.pop();
+      }
+    }
+  }
   return order;
 }
 
