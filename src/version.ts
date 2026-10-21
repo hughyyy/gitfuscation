@@ -1,7 +1,7 @@
 // version.ts — program version tracking. Bump on every change:
 // letters first (0.1a -> 0.1b -> ... -> 0.1z -> 0.2a), i.e. bumpVersion().
 
-export const PROGRAM_VERSION = '0.1e';
+export const PROGRAM_VERSION = '0.1f';
 
 /** Bump a semver-ish label: '0.1a' -> '0.1b'; '0.1z' -> '0.2a'. */
 export function bumpVersion(v: string): string {

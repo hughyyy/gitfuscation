@@ -4,13 +4,20 @@ Date: 2026-10-21 · Status: approved v0.2 (stack + owner decisions resolved)
 
 ## 1. Overview
 
-`gitfuscation` is a tooling suite for generating synthetic noise history that protects activity privacy. Two products share one core:
+`gitfuscation` generates synthetic noise history to protect the privacy of your
+real activity, and turns your contribution graph into a canvas for artwork.
+Three capabilities share one core:
 
-- **Day 1 — Activity generator**: create a brand-new repo containing a year of
-  history whose per-day commit pattern looks human: long active streaks,
-  occasional gaps, weekend/Friday-night boosts (but never guarantees), and rare
-  burst days with 100+ commits. A dependency-free web UI previews the GitHub
-  contribution chart from settings *before* generating the repo.
+- **Synthetic activity generator**: create a brand-new repo containing a year of
+  synthetic history whose per-day commit pattern looks human: long active
+  streaks, occasional gaps, weekend/Friday-night boosts (but never guarantees),
+  and rare burst days with 100+ commits. A dependency-free web UI previews the
+  GitHub contribution chart from settings *before* generating the repo.
+- **Contribution art (signwriter)**: paint shades onto individual days or
+  import an image converted to a greyscale pixel grid, so the generated
+  history displays your artwork on the contribution counter.
+- **Attribution repair (`reauth`)**: fix incorrect commit attribution on repos
+  you own — identity-only changes that preserve every date, message, and tree.
 
 ### Ground rules (verified facts the design depends on)
 
@@ -352,6 +359,16 @@ checklist reminding the GitHub attribution rules (§1) and force-push guidance.
 - `colorScale=absolute`: level via `absoluteThresholds`, so the chart is stable
   regardless of peak days.
 
+## 6. Attribution repair (`reauth`)
+
+Corrects incorrect commit attribution on repos you own (e.g. commits made under
+a machine-local git identity). Properties: commit objects are rebuilt with
+identical trees, author/committer dates, and messages; only the author and
+committer identity lines are mapped; merges/branches are preserved; annotated
+tags are retargeted to the rewritten commits; every touched ref is backed up
+under `refs/backup/*` before mutation; the result is `git fsck` verified; a
+dry run writes nothing. See README "Repositories" for usage.
+
 ## 7. Implementation plan
 
 |#|Milestone|Work|Acceptance|
@@ -399,15 +416,15 @@ plumbing, M4 needs M1+M3. M3 parity is the guardrail that keeps the preview
 3. **Total commits**: realism-first; `totalCommits` stays an opt-in override. [Resolved]
 4. **Day-1 remote**: local-only generation; push is a documented `git push` step. [Resolved]
 
-6. **Versioning**: program version lives in `src/version.ts` (`PROGRAM_VERSION`,
-   currently `0.1a`), surfaced in the UI header, `--version`, `/api/health`, and
-   the generated README; bump on every change via `bumpVersion` (`0.1a -> 0.1b
-   -> ... -> 0.1z -> 0.2a`). [Resolved]
-7. **Session persistence**: the web UI stores the full current settings
+5. **Versioning**: program version lives in `src/version.ts` (`PROGRAM_VERSION`,
+   initially `0.1a`, bumped on every change via `bumpVersion` — `0.1a ->
+   0.1b -> ... -> 0.1z -> 0.2a`), surfaced in the UI header, `--version`,
+   `/api/health`, and the generated README. [Resolved]
+6. **Session persistence**: the web UI stores the full current settings
    (including painted `signwriter.overrides` and brush state) in
    `localStorage` and restores on load; Export/Import buttons move settings to
    and from JSON files. Painted designs therefore survive refreshes. [Resolved]
-8. **Image import**: the Painting panel converts an imported image (png/jpeg/
+7. **Image import**: the Painting panel converts an imported image (png/jpeg/
    webp/gif) to a pixellated greyscale grid — luminance quantized to the 0..4
    level scale, auto-fitted to the 7-row chart by aspect ratio or a fixed
    column count — and paints it onto the chart at a chosen start column

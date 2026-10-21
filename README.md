@@ -111,8 +111,9 @@ background for the clearest result.
 
 Inspect any repo under a root directory (default: the parent of this project —
 e.g. `Source/`), see its author breakdown and timeline, and reattribute commits
-to the right GitHub identity. Useful for correcting machine-local agentic
-coding that committed under a box identity (e.g. `bernie <bernie@localhost>`):
+to the right GitHub identity. Reattribution changes **only author identity** —
+every date, message, and file is preserved. Useful for correcting machine-local
+agentic coding that committed under a box identity (e.g. `bernie <bernie@localhost>`):
 
 ```
 node src/main.ts serve            # → open http://127.0.0.1:8315 → Repositories
