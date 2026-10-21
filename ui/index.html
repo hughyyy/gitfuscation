@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gitfuscation — history studio</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>gitfuscation</h1>
+    <p class="tagline">generate a year of synthetic activity history, previewed before it exists</p>
+    <span id="health" class="health" title="server status">connecting</span>
+  </header>
+
+  <div id="identity-banner" class="banner warning hidden">
+    Author identity is a fallback (<code id="identity-email"></code>). GitHub credits commits only
+    to a verified email linked to your account — set the real one below, or the graph stays empty.
+  </div>
+
+  <main>
+    <aside id="settings">
+      <section id="output-panel">
+        <h2>Output</h2>
+        <label>Repo name <input data-path="output.repoName" type="text" /></label>
+        <label>Out path <input data-path="output.outPath" type="text" /></label>
+        <label>Branch <select data-path="output.branchName">
+          <option>main</option><option>master</option>
+        </select></label>
+        <label>Author name <input data-path="output.authorName" type="text" /></label>
+        <label>Author email <input data-path="output.authorEmail" type="text" /></label>
+        <label>UTC offset (tz) <input data-path="output.tzOffset" type="number" step="1" min="-14" max="14" /></label>
+        <label class="check"><input data-path="output.replace" type="checkbox" /> Replace existing out path</label>
+      </section>
+
+      <section id="timeline-panel">
+        <h2>Timeline</h2>
+        <label>Start date (blank = ends today) <input data-path="timeline.startDate" type="date" /></label>
+        <label>Duration (days) <input data-path="timeline.durationDays" type="number" min="1" max="3660" /></label>
+        <label>Week starts on <select data-path="timeline.weekStart">
+          <option value="sunday">Sunday</option><option value="monday">Monday</option>
+        </select></label>
+      </section>
+
+      <section id="activity-panel">
+        <h2>Activity</h2>
+        <label>Seed <input data-path="activity.seed" type="number" step="1" /></label>
+        <label>Total commits (blank = natural) <input data-path="activity.totalCommits" type="number" min="1" step="1" /></label>
+        <label>Mean commits / active day <input data-path="activity.meanCommitsPerDay" type="number" min="0.1" step="0.5" /></label>
+        <label>Max commits / day <input data-path="activity.maxCommitsPerDay" type="number" min="1" step="1" /></label>
+        <label>Burst probability (marathon days)
+          <span class="range-row"><input data-path="activity.burstProbability" type="range" min="0" max="1" step="0.01" /><output></output></span>
+        </label>
+        <label>Burst floor (min commits) <input data-path="activity.burstMinCommits" type="number" min="1" step="1" /></label>
+        <label>Weekend activity boost
+          <span class="range-row"><input data-path="activity.weekendBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
+        </label>
+        <label>Fri/Sat commit &amp; night boost
+          <span class="range-row"><input data-path="activity.weekendCommitBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
+        </label>
+        <label>Streak persistence
+          <span class="range-row"><input data-path="activity.streakPersistence" type="range" min="0" max="1" step="0.01" /><output></output></span>
+        </label>
+        <label>Mean gap days
+          <span class="range-row"><input data-path="activity.meanGapDays" type="range" min="0.5" max="10" step="0.25" /><output></output></span>
+        </label>
+        <label>Min minutes between commits <input data-path="activity.minMinutesBetweenCommits" type="number" min="0" max="1440" step="1" /></label>
+        <label>Count style <select data-path="activity.commitCountStyle">
+          <option value="random">Random</option><option value="fixed">Fixed (tests)</option>
+        </select></label>
+      </section>
+
+      <section id="content-panel">
+        <h2>Content</h2>
+        <label>Initial files <input data-path="content.fileCount" type="number" min="1" max="500" step="1" /></label>
+        <label>Text style <select data-path="content.contentStyle">
+          <option value="markdown">Markdown notes</option><option value="lorem">Lorem ipsum</option><option value="words">Random words</option>
+        </select></label>
+        <label>Files per commit (max) <input data-path="content.filesPerCommit" type="number" min="1" max="4" step="1" /></label>
+        <label>New-file probability
+          <span class="range-row"><input data-path="content.newFileProbability" type="range" min="0" max="1" step="0.01" /><output></output></span>
+        </label>
+        <label>Message style <select data-path="content.commitMessageStyle">
+          <option value="conventional">Conventional</option><option value="random">Random words</option>
+        </select></label>
+        <label>Body probability
+          <span class="range-row"><input data-path="content.bodyProbability" type="range" min="0" max="1" step="0.01" /><output></output></span>
+        </label>
+      </section>
+
+      <section id="preview-panel">
+        <h2>Preview</h2>
+        <label>Color scale <select data-path="preview.colorScale">
+          <option value="github">GitHub relative</option><option value="absolute">Absolute thresholds</option>
+        </select></label>
+        <label>Thresholds (level 2..5)
+          <span class="thresholds">
+            <input data-path="preview.absoluteThresholds.0" type="number" min="1" step="1" />
+            <input data-path="preview.absoluteThresholds.1" type="number" min="1" step="1" />
+            <input data-path="preview.absoluteThresholds.2" type="number" min="1" step="1" />
+            <input data-path="preview.absoluteThresholds.3" type="number" min="1" step="1" />
+          </span>
+        </label>
+      </section>
+
+      <button id="generate-btn" type="button">Generate repo</button>
+      <p id="status-line" class="status"></p>
+    </aside>
+
+    <section id="stage">
+      <div class="chart-scroll">
+        <div id="chart" class="chart">
+          <p class="placeholder">Loading default chart...</p>
+        </div>
+      </div>
+      <div id="stats" class="stats"></div>
+      <div id="legend" class="legend"></div>
+      <div id="result" class="result hidden"></div>
+      <div id="errors" class="errors hidden"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

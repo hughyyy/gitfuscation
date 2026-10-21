@@ -1,6 +1,6 @@
 # gitfuscation — Specification + Implementation Plan
 
-Date: 2026-10-21 · Status: draft v0.1
+Date: 2026-10-21 · Status: approved v0.2 (stack + owner decisions resolved)
 
 ## 1. Overview
 
@@ -44,35 +44,41 @@ rules — it relies on honest author identity and own repos.
 
 ## 2. Architecture
 
-Zero-dependency Python 3.11+ backend (stdlib only) + vanilla HTML/CSS/JS front
-end (no build step). Git is driven through its plumbing commands via
-`subprocess` for speed and correctness.
+Node.js/TypeScript backend with **zero runtime dependencies** + vanilla
+HTML/CSS/JS front end (no build step). TypeScript runs directly via Node's
+native type stripping (Node ≥ 23.6; Node 24 present), so `.ts` sources execute
+with `node` unchanged. Code is restricted to erasable TypeScript syntax (types
+only — no enums/namespaces/decorators) so stripping is safe. Typechecking is a
+dev-only `tsc --noEmit`; tests use the built-in `node --test` runner. Git is
+driven through its plumbing commands via `child_process.execFile` for speed and
+correctness.
 
 ```
 gitfuscation/
   README.md
   SPEC.md
-  src/gitfuscation/
-    __init__.py
+  package.json          # type: module; no runtime deps
+  tsconfig.json         # typecheck only (noEmit)
+  src/
 
-    settings.py          # schema, defaults, validation, JSON (de)serialization
-    schedule.py          # activity model -> ordered list of commits (core)
-    content.py           # file corpus, text generators, commit-message bank
-    gitutil.py           # plumbing wrappers (hash-object, mktree, commit-tree,
-                         #   update-ref, fast helpers)
-    materialize.py       # Day 1: schedule -> fresh repo
+    settings.ts         # schema, defaults, validation, JSON (de)serialization
+    schedule.ts         # activity model -> ordered list of commits (core)
+    content.ts          # file corpus, text generators, commit-message bank
+    gitutil.ts          # plumbing wrappers (hash-object, mktree, commit-tree,
+                        #   update-ref, fast helpers)
+    materialize.ts      # Day 1: schedule -> fresh repo
 
-    preview.py           # schedule -> contribution matrix (levels, 7xN)
-    server.py            # ThreadingHTTPServer + /api endpoints + static UI
+    preview.ts          # schedule -> contribution matrix (levels, 7xN)
+    server.ts           # node http server + /api endpoints + static UI
   ui/
     index.html, app.js, style.css
   tests/
-    test_schedule.py, test_preview.py
-    test_materialize.py, test_rewrite.py
-  generated/             # scratch output, gitignored
+    schedule.test.ts, settings.test.ts, preview.test.ts
+
+  generated/            # scratch output, gitignored
 ```
 
-CLI entry points (`python -m gitfuscation …`):
+CLI entry points (`node src/main.ts …`):
 
 | Command | Purpose |
 |---|---|
@@ -90,7 +96,7 @@ never re-rolls randomness.
 ## 3. Settings model (Day 1 / shared)
 
 Single JSON settings object, namespaced by concern. Values with defaults;
-validation in `settings.py` (clamp + type-check, explicit error list, no silent
+validation in `settings.ts` (clamp + type-check, explicit error list, no silent
 coercion).
 
 ### 3.1 `output`
@@ -103,12 +109,17 @@ coercion).
 |`authorName`|str|env `GIT_AUTHOR_NAME` → `GIT_COMMITTER_NAME` → `git config user.name` → `gitfuscation`|Author/committer name (same both)|
 |`authorEmail`|str|`git config user.email` → `gitfuscation@localhost`|Must be a **verified GitHub email** for graph credit|
 |`tzOffset`|int|local UTC offset at run time|Fixed offset (e.g. `-5`) applied to every timestamp|
+|`replace`|bool|`false`|Remove an existing `outPath` before generating|
+
+Resolution chain is read at load time; the UI shows the resolved identity
+prominently with a "must be a verified GitHub email" banner whenever the email
+did not come from `git config user.email`.
 
 ### 3.2 `timeline`
 
 |Key|Type|Default|Meaning|
 |---|---|---|---|
-|`startDate`|str (ISO) or null|null → 12 months + 1 day before today|First visible day; set so the repo ends "today"|
+|`startDate`|str (ISO) or null|null → today − (`durationDays`−1) days|First visible day; default window ends today|
 |`durationDays`|int|365|Days generated from `startDate` (inclusive)|
 |`weekStart`|enum `sunday`/`monday`|`sunday`|Day a preview column begins on (rendering only)|
 
@@ -120,13 +131,13 @@ coercion).
 |`totalCommits`|int or null|null|If set, the generator rescales daily counts so the sum matches (overrides mean)|
 |`meanCommitsPerDay`|float|5|Baseline Poisson intensity for an *active* day|
 |`maxCommitsPerDay`|int|140|Hard cap per day (bursts clamp here)|
-|`burstProbability`|float|0.04|Per-active-day chance of a burst (large multiplier)|
-|`burstMultiplierMax`|float|12|Burst multiplies mean this much (before cap)|
+|`burstProbability`|float|0.04|Per-active-day chance of a marathon burst day|
+|`burstMinCommits`|int|40|Floor for a burst day's count (actual floor = max of this, 40, 6×mean; clamped to `maxCommitsPerDay`)|
 |`weekendBoost`|float|1.5|Multiplies *activity probability* on Fri/Sat/Sun|
-|`weekendCommitBoost`|float|1.4|Multiplies per-day *commit count* on Fri/Sat/Sun|
+|`weekendCommitBoost`|float|1.4|Multiplies per-day *commit count* and evening hours on Fri/Sat/Sun|
 |`streakPersistence`|float|0.88|P(day active \| previous active)|
 |`meanGapDays`|float|2.0|Mean rest-gap length when a streak breaks|
-|`hourWeights`|array[24]|table §3.3.1|Relative commit likelihood per hour-of-day (UTC-offset clock)|
+|`hourWeights`|array[24]|table §3.3.1|Relative commit likelihood per hour-of-day (tz-offset clock)|
 |`minMinutesBetweenCommits`|int|3|Reserve this floor between consecutive commits of a day|
 |`commitCountStyle`|enum `random`/`fixed`|`random`|`fixed` makes every active day emit exactly `meanCommitsPerDay` (for testing)|
 
@@ -139,9 +150,8 @@ coercion).
 6, 7, 7,  7,  8,  9, 10,12,14,14,12, 8
 ```
 
-`weekendCommitBoost` additionally raises the evening hours (18–02) on Fri/Sat by
-weighting the same table — giving the Friday-night effect without forcing it on
-every weekend.
+`weekendCommitBoost` additionally multiplies the night hours (18–02) on Fri/Sat
+— the Friday-night effect without forcing it on every weekend.
 
 ### 3.4 `content`
 
@@ -163,7 +173,7 @@ every weekend.
 
 ## 4. Day 1 — Activity generator
 
-### 4.1 Schedule algorithm (`schedule.py`)
+### 4.1 Schedule algorithm (`schedule.ts`)
 
 Produces `list[Commit]` (timestamp + per-commit file plan), generated top-down:
 
@@ -185,11 +195,17 @@ Produces `list[Commit]` (timestamp + per-commit file plan), generated top-down:
 
 ```
 base  = Poisson(meanCommitsPerDay)
-boost = weekendBoost (Fri/Sat/Sun) else 1        # multiplies base
-burst = (rand() < burstProbability) ? Uniform(4, burstMultiplierMax) : 1
-n     = min(maxCommitsPerDay, round(base * boost * burst))
-n     = max(n, 1)
+n     = round(base * weekendBoost^weekend)        # boost only on Fri/Sat/Sun
+if rand() < burstProbability:                      # marathon day
+  floor = max(burstMinCommits, 40, 6*meanCommitsPerDay), clamped to maxCommitsPerDay
+  n     = round(uniform(floor, maxCommitsPerDay))
+n = clamp(n, 1, maxCommitsPerDay)
 ```
+
+Marathon days are uniform draws from `[floor, maxCommitsPerDay]`, which makes
+days with >100 commits a reliable feature (default: ~4 per year) instead of a
+lucky tail event. Days between the normal range and the burst floor are
+naturally rare — the model never fabricates "medium-marathon" days.
 
 If `totalCommits` is set, rescale all days by `target/Σn` (rounding and
 distributing remainders day-by-day) before the cap; `maxCommitsPerDay` is then
@@ -205,44 +221,44 @@ applied after rescale so the total is honored.
 
 **Layer D — commit file plans.** See §4.3.
 
-Determinism: `random.Random(seed)`; all draws drawn in a strict, documented order
+Determinism: `mulberry32(seed)`; all draws follow a strict, documented order
 (states, then counts, then times, then files) so a seed reproduces byte-identical
 schedules across runs and across the preview/generate paths.
 
-### 4.2 Materialization (`materialize.py`)
+### 4.2 Materialization (`materialize.ts`)
 
 Creates the repo with plumbing commands only; no working-tree churn, no `git
-add`/`git commit` per commit.
+add`/`git commit` per commit. All git invocations go through `execFile` with the
+author/committer identity and dates supplied by environment variables.
 
 1. `git init -b <branchName> <outPath>`.
 2. Build the initial corpus: `fileCount` files at seed content (see §4.4).
-   Record `state = {path: blob_oid}` and compute the initial tree.
+   Record `state = {path: blobOid}` and compute the initial tree.
 3. **Initial commit**: all files, `author_date = startDate 00:00 tz`, message
    `chore: initial scaffold`.
 4. For each scheduled commit in chronological order:
 
    - Update content: choose `1..filesPerCommit` files (weighted so active files
      accumulate history; occasional brand-new file per `newFileProbability`);
-     append a dated entry; write new blobs via
-     `git hash-object -w --stdin`.
-   - Rebuild the tree: emit the whole `state` as one `git mktree` input (dozens
-     of entries ⇒ ~1 ms), producing `new_tree`.
-   - `git commit-tree <new_tree> -p <HEAD>`, with
-     `GIT_AUTHOR_{NAME,EMAIL,DATE}` and `GIT_COMMITTER_{NAME,EMAIL,DATE}` set —
-     `DATE` formatted `"@<unix> <tz>"`.
-   - `git update-ref refs/heads/<branch> <new_sha>`.
+     append a dated entry; write new blobs via `git hash-object -w --stdin`.
+   - Rebuild the tree: emit the whole `state` as nested `git mktree` inputs
+     (one per directory), producing `newTree`.
+   - `git commit-tree <newTree> -p <HEAD>`, with `GIT_AUTHOR_{NAME,EMAIL,DATE}`
+     and `GIT_COMMITTER_{NAME,EMAIL,DATE}` env vars — `DATE` formatted
+     `"@<unix> <tz>"`.
+   - `git update-ref refs/heads/<branch> <newSha>`.
 
 5. `git gc --quiet`, then report: commit count, per-day histogram, first/last
    dates, file count, branch.
 
-Performance: each commit is 3 subprocess calls over ~24 file entries — well under
+Performance: each commit is 3 execFile calls over ~24 file entries — well under
 a millisecond of git work each. 5,000 commits ≈ a few seconds. Single
 chronological parent chain keeps topology trivially correct.
 
-### 4.3 Per-commit file plan
+### 4.3 Per-commit file plan (content.ts)
 
 - Files are paths like `docs/architecture.md`, `notes/<topic>.md`,
-  `src/tools.py`, `ideas/<n>.md`, … (style-dependent pool).
+  `src/tools.ts`, `ideas/<n>.md`, … (style-dependent pool).
 - A commit picks files weighted by *recency* (files touched more recently are
   somewhat more likely — mirrors how humans cluster work), plus a small uniform
   floor so stale files still grow.
@@ -251,7 +267,7 @@ chronological parent chain keeps topology trivially correct.
   note-taking rather than rewriting.
 - When a new file is added, it starts with a header plus its first entries.
 
-### 4.4 Text & message generation (`content.py`)
+### 4.4 Text & message generation (content.ts)
 
 - **Markdown style**: heading + backtick code fences + bullet list + prose word
   salad drawn from a keyword bank → realistic README/notes flavor.
@@ -265,13 +281,14 @@ chronological parent chain keeps topology trivially correct.
 
 ## 5. Web UI
 
-Single page, `ThreadingHTTPServer`, endpoints:
+Single page served by the Node `http` server, endpoints:
 
 |Route|Method|Behaviour|
 |---|---|---|
 |`/`|GET|`ui/index.html` + static assets|
 |`/api/preview`|POST|Body = settings; returns contribution matrix + stats (below). Runs schedule + preview layer, never touches git.|
-|`/api/generate`|POST|Body = settings; runs `materialize` in a worker (single global lock — one generation at a time), streams nothing, returns summary + repo path.|
+|`/api/generate`|POST|Body = settings; runs `materialize` in a worker (single global lock — one generation at a time), returns summary + repo path.|
+|`/api/settings-defaults`|GET|Normalized default settings + resolved identity (UI seeds the form).|
 |`/api/health`|GET|`{"ok": true}`|
 
 **Preview response schema:**
@@ -296,7 +313,7 @@ tracks the user's edits live. "Generate repo" → `POST /api/generate` → summa
 panel (commit count, first/last date, file count, path) plus an explicit
 checklist reminding the GitHub attribution rules (§1) and force-push guidance.
 
-### 5.1 Level computation (`preview.py`)
+### 5.1 Level computation (preview.ts)
 
 - `colorScale=github` (default): reproduce the classic GitHub relative scale.
   With `max` = max daily count over the window:
@@ -310,11 +327,11 @@ checklist reminding the GitHub attribution rules (§1) and force-push guidance.
 
 |#|Milestone|Work|Acceptance|
 |---|---|---|---|
-|M0|Scaffold|Layout per §2; `settings.py` schema+validation; CLI skeleton|`python -m gitfuscation serve` prints banner; invalid config returns a clean error list|
-|M1|Schedule engine|`schedule.py` complete (layers A–D, determinism, `totalCommits` rescale)|`test_schedule.py` green: determinism, weekday lift, ≥2 gaps & ≥6 streaks per year window, monotonic intra-day clock, totalCommons≈target, burst days appear|
-|M2|Materializer|`gitutil.py` + `materialize.py`|`test_materialize.py` green: builds a real repo; `git rev-list --count` == schedule count; `git log` author dates match schedule exactly; default branch has all commits; corpus file count matches setting|
-|M3|Preview parity|`preview.py` + wiring `schedule→preview`|`test_preview.py` green: `generate(s)` then `preview(s)` agree cell-by-cell on the same seed; github-scaling thresholds behave per §5.1|
-|M4|Web UI|`server.py` + `ui/*`|Browser-driven check: edit settings → chart re-renders; generate → repo appears with matching stats; `api/health` ok (*manual note*: push to a real GitHub account and watch the graph — ~24 h refresh)|
+|M0|Scaffold|Layout per §2; `settings.ts` schema+validation; CLI skeleton|`node src/main.ts serve` prints banner; invalid config returns a clean error list; `tsc --noEmit` clean|
+|M1|Schedule engine|`schedule.ts` complete (layers A–D, determinism, `totalCommits` rescale)|`node --test` green: determinism, weekday lift, ≥2 gaps & ≥6 streaks per year window, monotonic intra-day clock, total≈target, burst days appear|
+|M2|Materializer|`gitutil.ts` + `materialize.ts`|`materialize.test.ts` green: builds a real repo; `git rev-list --count` == schedule count; `git log` author dates match schedule exactly; default branch has all commits; corpus file count matches setting; `git fsck` clean|
+|M3|Preview parity|`preview.ts` + wiring `schedule→preview`|`preview.test.ts` green: `generate(s)` then `preview(s)` agree cell-by-cell on the same seed; github-scaling thresholds behave per §5.1|
+|M4|Web UI|`server.ts` + `ui/*`|Browser-driven check: edit settings → chart re-renders; generate → repo appears with matching stats; `api/health` ok (*manual note*: push to a real GitHub account and watch the graph — ~24 h refresh)|
 |M5|Docs & polish|`README.md` (quick start, attribution checklist), sample config|End-to-end: `serve`, tweak, generate, `git log --pretty=%aD` shows a plausible year|
 
 Milestone order is dependency-driven: M1 is the only math, M2 the only git
@@ -334,21 +351,22 @@ plumbing, M4 needs M1+M3. M3 parity is the guardrail that keeps the preview
 ## 9. Verification strategy (non-negotiable checks)
 
 - **Statistical sanity of a generated year** (run over several seeds, asserted in
-  `test_schedule.py`):
+  `tests/schedule.test.ts`):
   - Share of active weekend days > share of active weekdays.
   - ≥6 streaks of ≥4 consecutive active days; ≥2 gaps of ≥2 dead days.
   - ≥1 day with >100 commits; some days with 0.
-  - Determinism: same seed ⇒ identical schedule (byte comparison).
+  - Determinism: same seed ⇒ identical schedule (structural equality).
 - **Repo correctness** (integration): `git fsck --strict` passes; commit count,
   all author dates, branch tip, and file contents exactly match the schedule.
 - **UI** (browser drive, manual or scripted): chart equals
   `git log --pretty=%ad` counts per day on the generated repo.
 
-## 10. Open questions for the owner
+## 10. Owner decisions (recorded 2026-10-21)
 
-1. `authorEmail` default: hard default `gitfuscation@localhost` vs prompt-on-start
-   for first-time users (the biggest cause of invisible graphs).
-2. Should `totalCommits` default on so the chart has a predictable total, or stay
-   `null` (mean-driven) for realism-first?
-3. Remote push: include `git push --force` helper at launch, or leave as a
-   documented manual step?
+1. **Identity**: auto-detect from `git config` with loud UI presentation (verified-email
+   note + post-generation checklist). [Resolved]
+2. **Stack**: Node.js/TypeScript, zero runtime deps, native type stripping, no build
+   step. [Resolved — owner override of the original Python proposal]
+3. **Total commits**: realism-first; `totalCommits` stays an opt-in override. [Resolved]
+4. **Day-1 remote**: local-only generation; push is a documented `git push` step. [Resolved]
+

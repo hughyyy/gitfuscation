@@ -1,4 +1,5 @@
 # Scratch output from the generator
 generated/
+node_modules/
 __pycache__/
 *.pyc

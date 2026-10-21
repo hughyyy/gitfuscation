@@ -1,0 +1,19 @@
+{
+  "name": "gitfuscation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generate synthetic activity history for privacy noise and paint contribution-graph artwork; repair commit attribution on your own repos.",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "serve": "node src/main.ts serve",
+    "test": "node --test \"tests/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}

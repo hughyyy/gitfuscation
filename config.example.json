@@ -1,0 +1,39 @@
+{
+  "output": {
+    "repoName": "activity-history",
+    "outPath": "generated/activity-history",
+    "branchName": "main",
+    "replace": true
+  },
+  "timeline": {
+    "startDate": null,
+    "durationDays": 365,
+    "weekStart": "sunday"
+  },
+  "activity": {
+    "seed": 20261021,
+    "totalCommits": null,
+    "meanCommitsPerDay": 5,
+    "maxCommitsPerDay": 140,
+    "burstProbability": 0.04,
+    "burstMinCommits": 40,
+    "weekendBoost": 1.5,
+    "weekendCommitBoost": 1.4,
+    "streakPersistence": 0.88,
+    "meanGapDays": 2.0,
+    "minMinutesBetweenCommits": 3,
+    "commitCountStyle": "random"
+  },
+  "content": {
+    "fileCount": 24,
+    "contentStyle": "markdown",
+    "filesPerCommit": 1,
+    "newFileProbability": 0.02,
+    "commitMessageStyle": "conventional",
+    "bodyProbability": 0.12
+  },
+  "preview": {
+    "colorScale": "github",
+    "absoluteThresholds": [1, 3, 8, 20]
+  }
+}
