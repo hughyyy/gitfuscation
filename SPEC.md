@@ -407,3 +407,8 @@ plumbing, M4 needs M1+M3. M3 parity is the guardrail that keeps the preview
    (including painted `signwriter.overrides` and brush state) in
    `localStorage` and restores on load; Export/Import buttons move settings to
    and from JSON files. Painted designs therefore survive refreshes. [Resolved]
+8. **Image import**: the Painting panel converts an imported image (png/jpeg/
+   webp/gif) to a pixellated greyscale grid — luminance quantized to the 0..4
+   level scale, auto-fitted to the 7-row chart by aspect ratio or a fixed
+   column count — and paints it onto the chart at a chosen start column
+   (`src/greymap.ts` holds the pure math). [Resolved]

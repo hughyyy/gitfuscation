@@ -110,7 +110,34 @@ function leadDays(weekStart, firstWeekday) {
   return weekStart === 'sunday' ? firstWeekday : (firstWeekday + 6) % 7;
 }
 
+function renderImagePreview(grid) {
+  const wrap = document.getElementById('image-preview');
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = '';
+  const rows = grid.length;
+  const cols = grid[0].length;
+  const scale = 9;
+  const canvas = document.createElement('canvas');
+  canvas.width = cols * scale;
+  canvas.height = rows * scale;
+  const ctx = canvas.getContext('2d');
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const level = grid[r][c];
+      ctx.fillStyle = palette[level] ?? PALETTE_DEFAULT[level] ?? '#21262d';
+      ctx.fillRect(c * scale, r * scale, scale, scale);
+    }
+  }
+  wrap.appendChild(canvas);
+}
+
+function imageCols() {
+  const v = document.getElementById('image-cols').value;
+  return v === '' ? null : Math.max(1, Math.floor(Number(v) || 0));
+}
+
 function renderChart(payload, palette, weekStartOverride) {
+  lastPayload = payload;
   const weekStart = weekStartOverride ?? payload.weekStart;
   const { weeks, cells } = payload;
   const lead = leadDays(weekStart, weekdayOf(cells[0].dateISO));
@@ -203,6 +230,19 @@ let painted = new Map(); // dateKey -> level 0..4
 let paintEnabled = false;
 let paintLevel = 4;
 let paintRightLevel = 0;
+let lastPayload = null; // latest PreviewPayload (for image placement math)
+let imageGrid = null; // quantized levels rows x cols
+
+// Pure greyscale quantizer — mirrors src/greymap.ts (luminance -> 0..4).
+function luminanceLevel(r, g, b) {
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  return Math.min(4, Math.max(0, Math.round((lum * 4) / 255)));
+}
+
+function fitColumns(imgWidth, imgHeight, maxCols) {
+  if (imgHeight <= 0) return Math.max(1, Math.min(maxCols, 14));
+  return Math.max(1, Math.min(maxCols, Math.round((imgWidth / imgHeight) * 7)));
+}
 
 const STORAGE_KEY = 'gitfuscation:session:v1';
 
@@ -441,12 +481,59 @@ async function boot() {
       painted.clear();
       schedulePreview();
     });
-    // Grouped commits reveals the session-length field.
+    // grouped commits reveal + image import
     const groupedToggle = control('signwriter.grouped');
     const groupWrap = document.getElementById('group-mean-wrap');
     const syncGroup = () => groupWrap.classList.toggle('hidden', !groupedToggle.checked);
-    groupWrap.addEventListener('change', syncGroup);
+    groupedToggle.addEventListener('change', syncGroup);
     syncGroup();
+
+    const imageFile = document.getElementById('image-file');
+    const paintImageBtn = document.getElementById('paint-image-btn');
+    imageFile.addEventListener('change', async (evt) => {
+      const file = evt.target.files && evt.target.files[0];
+      if (!file || !lastPayload) return;
+      try {
+        const bitmap = await createImageBitmap(file);
+        const weeks = lastPayload.weeks;
+        const cols = imageCols() ?? fitColumns(bitmap.width, bitmap.height, weeks);
+        const canvas = document.createElement('canvas');
+        canvas.width = cols;
+        canvas.height = 7;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(bitmap, 0, 0, cols, 7);
+        const data = ctx.getImageData(0, 0, cols, 7).data;
+        imageGrid = [];
+        for (let row = 0; row < 7; row += 1) {
+          const line = [];
+          for (let col = 0; col < cols; col += 1) {
+            const i = (row * cols + col) * 4;
+            line.push(luminanceLevel(data[i], data[i + 1], data[i + 2]));
+          }
+          imageGrid.push(line);
+        }
+        renderImagePreview(imageGrid);
+        paintImageBtn.disabled = false;
+        bitmap.close();
+      } catch (e) {
+        showErrors(new Error(`image import failed: ${e.message}`));
+      }
+    });
+    paintImageBtn.addEventListener('click', () => {
+      if (!imageGrid || !lastPayload) return;
+      const startCol = Math.max(0, Number(document.getElementById('image-start-col').value) || 0);
+      const lead = leadDays(lastPayload.weekStart, weekdayOf(lastPayload.cells[0].dateISO));
+      painted.clear();
+      for (let row = 0; row < imageGrid.length; row += 1) {
+        for (let col = 0; col < imageGrid[row].length; col += 1) {
+          const dayIdx = (startCol + col) * 7 + row - lead;
+          const cell = lastPayload.cells[dayIdx];
+          if (cell) painted.set(cell.dateISO, imageGrid[row][col]);
+        }
+      }
+      schedulePreview();
+    });
 
     // Settings export/import (JSON files, pure settings — re-importable).
     document.getElementById('export-btn').addEventListener('click', () => {

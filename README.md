@@ -97,7 +97,10 @@ colour sliders (left-click level, right-click level — set one to 0 to make tha
 button erase), then click or drag across the chart; right-click and drag works
 too. **Full strength commits** (5–5000) sets the count painted at level 4 —
 lower levels scale by quarter. **Grouped commits** packs a painted day into a
-short session (mean length in minutes) instead of an all-day spread. "Erase all
+short session (mean length in minutes) instead of an all-day spread. **Import
+image** converts a png/jpeg/webp/gif to a pixellated greyscale grid (dark →
+level 0 … bright → level 4, auto-fitted to the 7-row chart by aspect ratio or
+a fixed column count) and paints it at the chosen start column. "Erase all
 painted cells" resets the banner. The banner travels with the settings, so
 preview and generate always agree; while painting is active the preview uses
 shade-exact absolute levels. On GitHub, the contribution graph re-colors cells

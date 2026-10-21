@@ -50,6 +50,8 @@ h1 { font-size: 18px; margin: 0; }
 }
 .btn-row { display: flex; gap: 8px; margin-top: 10px; }
 .btn-row .btn { flex: 1; padding: 7px 8px; font-size: 12px; }
+.image-preview { margin: 6px 0; }
+.image-preview canvas { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid var(--border); border-radius: 4px; }
 
 .banner {
   margin: 12px 20px 0;

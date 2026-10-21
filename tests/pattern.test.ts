@@ -95,7 +95,7 @@ test('generated repo contains a static README with the pattern', async () => {
 test('pattern embeds program version and exact generation settings', () => {
   const s = settings();
   const md = patternFromSettings(s);
-  assert.match(md, /Program version: 0\.1d/);
+  assert.match(md, /Program version: 0\.1e/);
   assert.match(md, /Generation settings \(exact\):/);
   const jsonBlock = md.split('```json')[1]?.split('```')[0] ?? '';
   assert.ok(jsonBlock.includes('"repoName": "activity-history"'), 'settings JSON embedded');
@@ -117,7 +117,7 @@ test('pattern embeds program version and exact generation settings', () => {
     'A',
     'a@b',
   );
-  assert.match(bare, /Program version: 0\.1d/);
+  assert.match(bare, /Program version: 0\.1e/);
   assert.match(bare, /Generation settings: not recorded/);
 });
 
