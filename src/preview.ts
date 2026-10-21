@@ -82,8 +82,8 @@ const LEVEL_CHARS = [' ', '\u2591', '\u2592', '\u2593', '\u2588'];
 
 /**
  * Render the contribution matrix as an ASCII heatmap: month ticks on top,
- * row labels per weekday, one cell per day (level chars), aligned into
- * weekStart-anchored columns.
+ * row labels per weekday, one ADJACENT cell per day (level chars), aligned
+ * into weekStart-anchored columns. No padding between cells.
  */
 export function renderAscii(payload: PreviewPayload): string {
   if (payload.cells.length === 0) {
@@ -94,36 +94,31 @@ export function renderAscii(payload: PreviewPayload): string {
   const label = ROW_LABELS[payload.weekStart];
   const lines: string[] = [];
 
-  // Month header
-  const header: string[] = [];
+  // Month ticks: each label spans its starting column (width = label length).
+  const header = new Array<string>(payload.weeks).fill(' ');
   let prevMonth = '';
   for (let col = 0; col < payload.weeks; col += 1) {
     const dayIdx = col * 7 - lead;
     if (dayIdx >= 0 && dayIdx < days.length) {
       const m = MONTHS[Number(days[dayIdx].dateISO.slice(5, 7)) - 1];
       if (m !== prevMonth) {
-        header.push(m.padEnd(7, ' '));
         prevMonth = m;
-      } else {
-        header.push(' '.repeat(7));
+        for (let i = 0; i < m.length && col + i < header.length; i += 1) {
+          header[col + i] = m[i];
+        }
       }
-    } else {
-      header.push(' '.repeat(7));
     }
   }
-  lines.push('       ' + header.join('').slice(0, payload.weeks * 7));
+  lines.push('       ' + header.join(''));
 
   for (let row = 0; row < 7; row += 1) {
-    const cells: string[] = [];
+    let out = '';
     for (let col = 0; col < payload.weeks; col += 1) {
       const dayIdx = col * 7 + row - lead;
       const cell = dayIdx >= 0 && dayIdx < days.length ? days[dayIdx] : undefined;
-      const ch = cell !== undefined ? LEVEL_CHARS[cell.level] : ' ';
-      cells.push(ch + ' '.repeat(6));
+      out += cell !== undefined ? LEVEL_CHARS[cell.level] : ' ';
     }
-    lines.push(
-      `${label[row].padEnd(7)}` + cells.join('').slice(0, payload.weeks * 7).replace(/ +$/g, ''),
-    );
+    lines.push(`${label[row].padEnd(7)}${out.trimEnd()}`);
   }
   lines.push('');
   lines.push(
