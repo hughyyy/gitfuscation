@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PROGRAM_VERSION, bumpVersion } from '../src/version.ts';
 
-test('current program version is 0.1a', () => {
-  assert.equal(PROGRAM_VERSION, '0.1a');
+test('current program version is 0.1b', () => {
+  assert.equal(PROGRAM_VERSION, '0.1b');
 });
 
 test('bumpVersion increments letters then minor', () => {
