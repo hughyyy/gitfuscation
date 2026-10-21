@@ -1,0 +1,4 @@
+# Scratch output from the generator
+generated/
+__pycache__/
+*.pyc
