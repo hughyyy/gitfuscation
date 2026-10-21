@@ -21,10 +21,17 @@ node src/main.ts serve
 
 Tweak the settings on the left — the chart re-renders live. When it looks
 right, click **Generate repo**. Every generated repo ships with a static
-`README.md` containing the ASCII contribution chart, so the pattern (including
-a painted banner) is visible on GitHub before anyone scrolls the graph. For an
+`README.md` containing the ASCII contribution chart, the exact generation
+settings, and the program version — so the pattern (including a painted
+banner) is visible on GitHub before anyone scrolls the graph. For an
 existing repo, `node src/main.ts readme <path> --commit` regenerates it from
 the actual history.
+
+The web UI remembers your session in browser storage: refresh or come back
+later and your settings, painted design, and brush levels are restored.
+**Export settings (JSON)** downloads the exact current configuration and
+**Import settings** loads one back — exported files are pure settings and
+re-import cleanly.
 
 ### CLI
 

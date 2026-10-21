@@ -10,6 +10,7 @@
   <header>
     <h1>gitfuscation</h1>
     <p class="tagline">generate a year of synthetic activity history, previewed before it exists</p>
+    <span id="version-chip" class="version-chip"></span>
     <span id="health" class="health" title="server status">connecting</span>
   </header>
 
@@ -135,6 +136,11 @@
       </section>
 
       <button id="generate-btn" type="button">Generate repo</button>
+      <div class="btn-row">
+        <button id="export-btn" class="btn secondary" type="button">Export settings (JSON)</button>
+        <button id="import-btn" class="btn secondary" type="button">Import settings</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden />
+      </div>
       <p id="status-line" class="status"></p>
     </aside>
 

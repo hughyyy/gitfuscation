@@ -92,6 +92,40 @@ test('generated repo contains a static README with the pattern', async () => {
   assert.equal(touchedBy[0], 'chore: initial scaffold');
 });
 
+test('pattern embeds program version and exact generation settings', () => {
+  const s = settings();
+  const md = patternFromSettings(s);
+  assert.match(md, /Program version: 0\.1a/);
+  assert.match(md, /Generation settings \(exact\):/);
+  const jsonBlock = md.split('```json')[1]?.split('```')[0] ?? '';
+  assert.ok(jsonBlock.includes('"repoName": "activity-history"'), 'settings JSON embedded');
+  assert.ok(jsonBlock.includes('"seed": 8'));
+  assert.ok(jsonBlock.includes('"durationDays": 60'));
+  // Without stored settings (arbitrary existing repo) the README still pins the version.
+  const bare = patternMarkdown(
+    {
+      cells: [],
+      weeks: 1,
+      rows: 7,
+      weekStart: 'sunday',
+      totals: { commits: 0, activeDays: 0, maxDay: 0, burstDays: 0 },
+      seed: 0,
+      startDate: '',
+      endDate: '',
+    },
+    'repo',
+    'A',
+    'a@b',
+  );
+  assert.match(bare, /Program version: 0\.1a/);
+  assert.match(bare, /Generation settings: not recorded/);
+});
+
+test('pattern rendering is deterministic (no timestamps/clocks)', () => {
+  const s = settings();
+  assert.equal(patternFromSettings(s), patternFromSettings(settings()));
+});
+
 test('chartFromRepo reconstructs the same pattern from git history', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gitfuscation-'));
   const { settings: s, errors } = normalizeSettings(

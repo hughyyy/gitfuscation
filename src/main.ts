@@ -14,8 +14,9 @@ import { loadIdentityMap, type IdentityMap } from './identity-map.ts';
 import { planReauth, executeReauth } from './reauth.ts';
 import { runGit } from './gitutil.ts';
 import { chartFromRepo, patternMarkdown } from './pattern.ts';
+import { PROGRAM_VERSION } from './version.ts';
 
-const USAGE = `gitfuscation — generate synthetic activity history, paint contribution art, and repair commit attribution
+const USAGE = `gitfuscation v${PROGRAM_VERSION} — generate synthetic activity history, paint contribution art, and repair commit attribution
 
 Usage: node src/main.ts <command> [options]
 
@@ -66,6 +67,10 @@ function parseArgs(argv: string[]): { cmd: string; args: CliArgs } {
     else if (argv[i] === '--no-committer') args.noCommitter = true;
     else if (argv[i] === '--no-tags') args.noTags = true;
     else if (argv[i] === '--commit') args.commit = true;
+    else if (argv[i] === '-V' || argv[i] === '--version') {
+      console.log(PROGRAM_VERSION);
+      process.exit(0);
+    }
     else if (argv[i] === '-h' || argv[i] === '--help') {
       console.log(USAGE);
       process.exit(0);

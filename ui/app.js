@@ -16,12 +16,26 @@ function setValue(path, value) {
   if (!el) return;
   if (el.type === 'checkbox') {
     el.checked = Boolean(value);
+  } else if (value === null || value === undefined) {
+    el.value = '';
   } else {
     el.value = value;
   }
   if (el.type === 'range') {
     const out = el.closest('.range-row')?.querySelector('output');
     if (out) out.textContent = value;
+  }
+}
+
+/** Push a settings object into the form (used for defaults, restore, import). */
+function applySettingsToForm(settings) {
+  for (const [k, v] of Object.entries(flatten(settings))) {
+    setValue(k, v);
+  }
+  // The two nullable fields serialize as null; render as blank inputs.
+  for (const p of ['timeline.startDate', 'activity.totalCommits']) {
+    const el = control(p);
+    if (el) el.value = '';
   }
 }
 
@@ -190,7 +204,53 @@ let paintEnabled = false;
 let paintLevel = 4;
 let paintRightLevel = 0;
 
+const STORAGE_KEY = 'gitfuscation:session:v1';
+
+function paintMeta() {
+  return { paintEnabled, paintLevel, paintRightLevel };
+}
+
+function saveSession() {
+  try {
+    const payload = { ...collectSettings(), _paint: paintMeta() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // storage unavailable/private mode: session simply won't survive refresh
+  }
+}
+
+function restoreSession() {
+  let raw = null;
+  try {
+    raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return;
+  }
+  if (!raw || typeof raw !== 'object') return;
+  const { _paint, ...settings } = raw;
+  applySettingsToForm(settings);
+  painted.clear();
+  const overrides = settings.signwriter?.overrides;
+  if (overrides && typeof overrides === 'object') {
+    for (const [dateKey, level] of Object.entries(overrides)) {
+      painted.set(dateKey, level);
+    }
+  }
+  if (_paint) {
+    paintEnabled = Boolean(_paint.paintEnabled);
+    paintLevel = Number(_paint.paintLevel ?? 4);
+    paintRightLevel = Number(_paint.paintRightLevel ?? 0);
+    document.getElementById('paint-enabled').checked = paintEnabled;
+    document.getElementById('paint-level').value = paintLevel;
+    document.getElementById('paint-level').closest('.range-row').querySelector('output').textContent = paintLevel;
+    document.getElementById('paint-right-level').value = paintRightLevel;
+    document.getElementById('paint-right-level').closest('.range-row').querySelector('output').textContent = paintRightLevel;
+    document.getElementById('chart').classList.toggle('painting', paintEnabled);
+  }
+}
+
 function schedulePreview() {
+  saveSession();
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
     const statusEl = document.getElementById('status-line');
@@ -342,14 +402,9 @@ async function boot() {
     health.textContent = 'server ok';
     health.classList.add('ok');
     palette = info.colorPalette ?? palette;
+    document.getElementById('version-chip').textContent = `v${info.version ?? '?'}`;
     const defaults = info.settings;
-    for (const [k, v] of Object.entries(flatten(defaults))) {
-      setValue(k, v);
-    }
-    const input = control('timeline.startDate');
-    if (input && defaults.timeline.startDate === null) input.value = '';
-    const total = control('activity.totalCommits');
-    if (total && defaults.activity.totalCommits === null) total.value = '';
+    applySettingsToForm(defaults);
 
     if (
       info.identity.source !== 'git' ||
@@ -390,10 +445,52 @@ async function boot() {
     const groupedToggle = control('signwriter.grouped');
     const groupWrap = document.getElementById('group-mean-wrap');
     const syncGroup = () => groupWrap.classList.toggle('hidden', !groupedToggle.checked);
-    groupedToggle.addEventListener('change', syncGroup);
+    groupWrap.addEventListener('change', syncGroup);
     syncGroup();
-    bindPainting();
 
+    // Settings export/import (JSON files, pure settings — re-importable).
+    document.getElementById('export-btn').addEventListener('click', () => {
+      const name = String(control('output.repoName').value || 'activity-history');
+      const blob = new Blob([JSON.stringify(collectSettings(), null, 2)], {
+        type: 'application/json',
+      });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${name}-settings.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    document.getElementById('import-btn').addEventListener('click', () => {
+      document.getElementById('import-file').click();
+    });
+    document.getElementById('import-file').addEventListener('change', async (evt) => {
+      const file = evt.target.files && evt.target.files[0];
+      evt.target.value = '';
+      if (!file) return;
+      try {
+        const raw = JSON.parse(await file.text());
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+          showErrors(new Error(`not a settings object: ${file.name}`));
+          return;
+        }
+        applySettingsToForm(raw);
+        painted.clear();
+        const overrides = raw.signwriter?.overrides;
+        if (overrides && typeof overrides === 'object') {
+          for (const [dateKey, level] of Object.entries(overrides)) {
+            painted.set(dateKey, level);
+          }
+        }
+        schedulePreview();
+        hideErrors();
+        document.getElementById('status-line').textContent = `imported ${file.name}`;
+      } catch (e) {
+        showErrors(new Error(`failed to import ${file.name}: ${e.message}`));
+      }
+    });
+
+    bindPainting();
+    restoreSession();
     schedulePreview();
   } catch (e) {
     health.textContent = 'server unreachable';

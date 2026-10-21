@@ -399,3 +399,11 @@ plumbing, M4 needs M1+M3. M3 parity is the guardrail that keeps the preview
 3. **Total commits**: realism-first; `totalCommits` stays an opt-in override. [Resolved]
 4. **Day-1 remote**: local-only generation; push is a documented `git push` step. [Resolved]
 
+6. **Versioning**: program version lives in `src/version.ts` (`PROGRAM_VERSION`,
+   currently `0.1a`), surfaced in the UI header, `--version`, `/api/health`, and
+   the generated README; bump on every change via `bumpVersion` (`0.1a -> 0.1b
+   -> ... -> 0.1z -> 0.2a`). [Resolved]
+7. **Session persistence**: the web UI stores the full current settings
+   (including painted `signwriter.overrides` and brush state) in
+   `localStorage` and restores on load; Export/Import buttons move settings to
+   and from JSON files. Painted designs therefore survive refreshes. [Resolved]

@@ -10,6 +10,7 @@ import { defaultSettings, normalizeSettings, computeRuntimeDefaults, type Settin
 import { previewFor } from './preview.ts';
 import { generateRepo } from './materialize.ts';
 import { LEVEL_COLORS } from './schedule.ts';
+import { PROGRAM_VERSION } from './version.ts';
 import { scanRepos } from './repoindex.ts';
 import { inspectAuthors } from './authors.ts';
 import {
@@ -135,11 +136,12 @@ export function startServer(opts: ServerOptions = {}): {
       return;
     }
       if (req.method === 'GET' && url.pathname === '/api/health') {
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 200, { ok: true, version: PROGRAM_VERSION });
         return;
       }
       if (req.method === 'GET' && url.pathname === '/api/settings-defaults') {
         sendJson(res, 200, {
+          version: PROGRAM_VERSION,
           settings: defaultSettings(runtime),
           identity: {
             source: runtime.identitySource,

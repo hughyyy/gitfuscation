@@ -4,10 +4,19 @@
 
 import { runGit } from './gitutil.ts';
 import { previewFor, renderAscii, type PreviewPayload } from './preview.ts';
-import type { Settings } from './settings.ts';
+import type { Settings, OutputSettings } from './settings.ts';
 import { STATIC_CONTENT_FILES } from './content.ts';
+import { PROGRAM_VERSION } from './version.ts';
 
 export const PATTERN_README_PATH: string = STATIC_CONTENT_FILES[0];
+
+/**
+ * The history-shaping settings embedded in the README: everything the
+ * generation depends on, minus environmental knobs (outPath, replace).
+ */
+export type GenerationSettings = Omit<Settings, 'output'> & {
+  output: Omit<OutputSettings, 'outPath' | 'replace'>;
+};
 
 /** Markdown document embedding the ASCII contribution chart. */
 export function patternMarkdown(
@@ -15,6 +24,7 @@ export function patternMarkdown(
   title: string,
   author: string,
   email: string,
+  settings: GenerationSettings | null = null,
 ): string {
   const chart = renderAscii(payload);
   const paintedDays = payload.cells.filter((c) => c.count === payload.totals.maxDay && payload.totals.maxDay > 0).length;
@@ -23,6 +33,10 @@ export function patternMarkdown(
     paintedDays > 0
       ? `\n${paintedDays} day(s) painted at full strength (${t.maxDay} commits).\n`
       : '';
+  const settingsBlock =
+    settings === null
+      ? '- Generation settings: not recorded (repo predates settings capture)'
+      : `- Generation settings (exact):\n\n  \`\`\`json\n  ${JSON.stringify(settings, null, 2).replace(/\n/g, '\n  ')}\n  \`\`\``;
   return `# ${title}
 
 Generated git history${t.activeDays > 0 && t.maxDay > 0 && paintedDays > 0 ? ' whose contribution graph spells a message' : ''}.
@@ -41,16 +55,25 @@ Legend: \`█\` = most commits in a day, \`░\` = a few, blank = none.
 - Window: ${payload.startDate} → ${payload.endDate}
 - Authored by: ${author} <${email}>
 - Generated with [gitfuscation](https://github.com/hughyyy/gitfuscation)
+- Program version: ${PROGRAM_VERSION}
+${settingsBlock}
 `;
 }
 
 /** Pattern for the settings-derived schedule (what the generator will build). */
 export function patternFromSettings(settings: Settings): string {
+  // Embed the exact history-shaping settings; outPath/replace are environment
+  // (where the repo was written), not parameters of the history itself, so
+  // excluding them keeps regeneration byte-identical anywhere.
+  const { output: out, ...rest } = settings;
+  const { outPath: _outPath, replace: _replace, ...output } = out;
+  const embedded = { ...rest, output };
   return patternMarkdown(
     previewFor(settings),
     settings.output.repoName,
     settings.output.authorName,
     settings.output.authorEmail,
+    embedded,
   );
 }
 

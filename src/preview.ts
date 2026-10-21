@@ -86,6 +86,9 @@ const LEVEL_CHARS = [' ', '\u2591', '\u2592', '\u2593', '\u2588'];
  * weekStart-anchored columns.
  */
 export function renderAscii(payload: PreviewPayload): string {
+  if (payload.cells.length === 0) {
+    return 'no commits';
+  }
   const lead = leadDays(payload.weekStart, new Date(`${payload.cells[0].dateISO}T00:00:00Z`).getUTCDay() as number);
   const days = payload.cells;
   const label = ROW_LABELS[payload.weekStart];
