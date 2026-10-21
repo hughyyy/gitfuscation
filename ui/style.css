@@ -83,6 +83,26 @@ section h2 {
   color: var(--dim);
 }
 
+details.collapsible {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+details.collapsible summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  user-select: none;
+  list-style: none;
+}
+details.collapsible summary::-webkit-details-marker { display: none; }
+details.collapsible summary .caret::before { content: '▸'; display: inline-block; margin-right: 8px; transition: transform 0.15s; color: var(--accent); }
+details.collapsible[open] summary .caret::before { transform: rotate(90deg); }
+details.collapsible .panel-body { padding: 0 14px 12px; }
+
 label {
   display: flex;
   flex-direction: column;

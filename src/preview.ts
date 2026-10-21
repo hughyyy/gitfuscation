@@ -1,6 +1,7 @@
 // preview.ts — schedule -> API payload + ASCII chart (SPEC §5, §5.1).
 
 import type { Settings } from './settings.ts';
+import { levelCountsFor } from './settings.ts';
 import { generateSchedule, levelFor, type ScheduleTotals } from './schedule.ts';
 
 export interface PreviewCell {
@@ -54,7 +55,7 @@ export function previewFor(settings: Settings): PreviewPayload {
     paintedDays.length > 0
       ? {
           colorScale: 'absolute',
-          absoluteThresholds: signwriterThresholds(settings.signwriter.levelCounts),
+          absoluteThresholds: signwriterThresholds(levelCountsFor(settings.signwriter.fullStrength)),
         }
       : settings.preview;
   const cells = schedule.days.map((d) => ({

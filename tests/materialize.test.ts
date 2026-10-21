@@ -129,7 +129,7 @@ test('preview and repo per-day counts agree with a painted banner', async () => 
 
   const payload = previewFor(settings);
   assert.equal(payload.cells.find((c) => c.dateISO === '2025-01-10')!.count, 60);
-  assert.equal(payload.cells.find((c) => c.dateISO === '2025-01-14')!.count, 6);
+  assert.equal(payload.cells.find((c) => c.dateISO === '2025-01-14')!.count, 15);
 
   const commits = await listCommits(result.outPath);
   const perDay = new Map<string, number>();

@@ -42,33 +42,64 @@
         </select></label>
       </section>
 
-      <section id="activity-panel">
-        <h2>Activity</h2>
-        <label>Seed <input data-path="activity.seed" type="number" step="1" /></label>
-        <label>Total commits (blank = natural) <input data-path="activity.totalCommits" type="number" min="1" step="1" /></label>
-        <label>Mean commits / active day <input data-path="activity.meanCommitsPerDay" type="number" min="0.1" step="0.5" /></label>
-        <label>Max commits / day <input data-path="activity.maxCommitsPerDay" type="number" min="1" step="1" /></label>
-        <label>Burst probability (marathon days)
-          <span class="range-row"><input data-path="activity.burstProbability" type="range" min="0" max="1" step="0.01" /><output></output></span>
-        </label>
-        <label>Burst floor (min commits) <input data-path="activity.burstMinCommits" type="number" min="1" step="1" /></label>
-        <label>Weekend activity boost
-          <span class="range-row"><input data-path="activity.weekendBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
-        </label>
-        <label>Fri/Sat commit &amp; night boost
-          <span class="range-row"><input data-path="activity.weekendCommitBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
-        </label>
-        <label>Streak persistence
-          <span class="range-row"><input data-path="activity.streakPersistence" type="range" min="0" max="1" step="0.01" /><output></output></span>
-        </label>
-        <label>Mean gap days
-          <span class="range-row"><input data-path="activity.meanGapDays" type="range" min="0.5" max="10" step="0.25" /><output></output></span>
-        </label>
-        <label>Min minutes between commits <input data-path="activity.minMinutesBetweenCommits" type="number" min="0" max="1440" step="1" /></label>
-        <label>Count style <select data-path="activity.commitCountStyle">
-          <option value="random">Random</option><option value="fixed">Fixed (tests)</option>
-        </select></label>
-      </section>
+      <details id="random-panel" class="collapsible" open>
+        <summary>Random commits <span class="caret"></span></summary>
+        <div class="panel-body">
+          <label class="check"><input data-path="activity.generateRandom" type="checkbox" /> Generate random activity (off = blank canvas)</label>
+          <label>Seed <input data-path="activity.seed" type="number" step="1" /></label>
+          <label>Total commits (blank = natural) <input data-path="activity.totalCommits" type="number" min="1" step="1" /></label>
+          <label>Mean commits / active day <input data-path="activity.meanCommitsPerDay" type="number" min="0.1" step="0.5" /></label>
+          <label>Max commits / day <input data-path="activity.maxCommitsPerDay" type="number" min="1" step="1" /></label>
+          <label>Burst probability (marathon days)
+            <span class="range-row"><input data-path="activity.burstProbability" type="range" min="0" max="1" step="0.01" /><output></output></span>
+          </label>
+          <label>Burst floor (min commits) <input data-path="activity.burstMinCommits" type="number" min="1" step="1" /></label>
+          <label>Weekend activity boost
+            <span class="range-row"><input data-path="activity.weekendBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
+          </label>
+          <label>Fri/Sat commit &amp; night boost
+            <span class="range-row"><input data-path="activity.weekendCommitBoost" type="range" min="0" max="3" step="0.05" /><output></output></span>
+          </label>
+          <label>Streak persistence
+            <span class="range-row"><input data-path="activity.streakPersistence" type="range" min="0" max="1" step="0.01" /><output></output></span>
+          </label>
+          <label>Mean gap days
+            <span class="range-row"><input data-path="activity.meanGapDays" type="range" min="0.5" max="10" step="0.25" /><output></output></span>
+          </label>
+          <label>Min minutes between commits <input data-path="activity.minMinutesBetweenCommits" type="number" min="0" max="1440" step="1" /></label>
+          <label>Count style <select data-path="activity.commitCountStyle">
+            <option value="random">Random</option><option value="fixed">Fixed (tests)</option>
+          </select></label>
+        </div>
+      </details>
+
+      <details id="painting-panel" class="collapsible">
+        <summary>Painting <span class="caret"></span></summary>
+        <div class="panel-body">
+          <label class="check"><input id="paint-enabled" type="checkbox" /> Paint mode (click/drag) — right-click paints</label>
+          <label>Left-click brush level
+            <span class="range-row"><input id="paint-level" type="range" min="0" max="4" step="1" value="4" /><output>4</output></span>
+          </label>
+          <label>Right-click brush level
+            <span class="range-row"><input id="paint-right-level" type="range" min="0" max="4" step="1" value="0" /><output>0</output></span>
+          </label>
+          <label>Full strength commits
+            <span class="range-row"><input data-path="signwriter.fullStrength" type="range" min="5" max="5000" step="5" /><output></output></span>
+          </label>
+          <p class="paint-hint">Level 4 (full strength) paints this many commits; lower
+            levels scale down by quarter. The colour sliders pick what each mouse
+            button paints — level 0 leaves the day empty.</p>
+          <label class="check"><input data-path="signwriter.grouped" type="checkbox" /> Grouped commits (tight session)</label>
+          <div id="group-mean-wrap" class="hidden">
+            <label>Mean session length (minutes)
+              <span class="range-row"><input data-path="signwriter.groupMeanMinutes" type="range" min="1" max="240" step="1" /><output></output></span>
+            </label>
+          </div>
+          <p class="paint-hint">Grouped painted days pack their commits into a short
+            window instead of spreading across the day.</p>
+          <button id="clear-banner-btn" class="btn secondary" type="button">Erase all painted cells</button>
+        </div>
+      </details>
 
       <section id="content-panel">
         <h2>Content</h2>
@@ -101,18 +132,6 @@
             <input data-path="preview.absoluteThresholds.3" type="number" min="1" step="1" />
           </span>
         </label>
-      </section>
-
-      <section id="signwriter-panel">
-        <h2>Signwriter</h2>
-        <label class="check"><input id="paint-enabled" type="checkbox" /> Paint mode (click/drag) — right-click erases</label>
-        <label>Brush level
-          <span class="range-row"><input id="paint-level" type="range" min="0" max="4" step="1" value="4" /><output>4</output></span>
-        </label>
-        <p class="paint-hint">Paint shades onto the chart to draw a banner — the repo
-          will contain exactly the painted pattern. GitHub re-colors with its own
-          relative scale when pushed; the preview below is shade-accurate.</p>
-        <button id="clear-banner-btn" class="btn secondary" type="button">Erase all painted cells</button>
       </section>
 
       <button id="generate-btn" type="button">Generate repo</button>

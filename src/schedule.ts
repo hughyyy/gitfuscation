@@ -15,6 +15,7 @@ import type {
   Settings,
   TimelineSettings,
 } from './settings.ts';
+import { levelCountsFor } from './settings.ts';
 
 // ---------------------------------------------------------------------------
 // PRNG
@@ -244,9 +245,46 @@ export function rescaleToTotal(
   return scaled.map((c) => Math.min(maxCommitsPerDay, c));
 }
 
+/** Sample an hour index from the (possibly weekend-boosted) weight table. */
+function sampleHourIndex(rng: () => number, weights: number[]): number {
+  const wTotal = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * wTotal;
+  for (let h = 0; h < 24; h += 1) {
+    r -= weights[h];
+    if (r <= 0) return h;
+  }
+  return 23;
+}
+
+/**
+ * Grouped painted day: n commits packed into a session window of mean length
+ * `meanMinutes`, starting at an hour-weighted time, at a steady 1s+ cadence
+ * (deterministic). `shorter time period` than the random-spread path.
+ */
+function groupedTimestamps(
+  rng: () => number,
+  dayEpoch: number,
+  count: number,
+  weights: number[],
+  startSecond: number,
+  meanMinutes: number,
+): number[] {
+  const hour = sampleHourIndex(rng, weights);
+  const start = dayEpoch + hour * 3600 + startSecond;
+  const unit = Math.max(1, Math.floor((meanMinutes * 60) / Math.max(1, count)));
+  const dayEnd = dayEpoch + 86400 - 1;
+  const span = (count - 1) * unit;
+  const begin = Math.max(dayEpoch, Math.min(start, dayEnd - span));
+  const times: number[] = [];
+  for (let k = 0; k < count; k += 1) times.push(begin + k * unit);
+  return times;
+}
+
 /**
  * Layer C: sample n ascending timestamps within day i, enforcing the min gap.
  * Friday/Saturday get the evening-night hour bump (weekendCommitBoost on 18-02).
+ * `grouped` packs painted days into a tight session window instead of a random
+ * spread; for very large counts the min gap relaxes so a day can physically fit.
  */
 export function dayTimestamps(
   rng: () => number,
@@ -255,6 +293,7 @@ export function dayTimestamps(
   weekday: number,
   activity: ActivitySettings,
   tzOffset: number,
+  grouped: { enabled: boolean; meanMinutes: number } = { enabled: false, meanMinutes: 30 },
 ): number[] {
   if (count === 0) return [];
   const weights = [...activity.hourWeights];
@@ -265,6 +304,18 @@ export function dayTimestamps(
   }
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 0) weights.fill(1);
+
+  if (grouped.enabled) {
+    return groupedTimestamps(
+      rng,
+      dayEpoch,
+      count,
+      weights,
+      Math.floor(rng() * 60) * 60,
+      grouped.meanMinutes,
+    );
+  }
+
   const cdf: number[] = [];
   let acc = 0;
   const wTotal = weights.reduce((a, b) => a + b, 0);
@@ -272,7 +323,10 @@ export function dayTimestamps(
     acc += w;
     cdf.push(acc / wTotal);
   }
-  const minGap = activity.minMinutesBetweenCommits * 60;
+  // A day holds `count` commits: relax the min gap if the requested one cannot
+  // physically fit (e.g. 5000 painted commits at 3 min apart).
+  const maxGap = Math.max(1, Math.floor((86400 - 120) / Math.max(1, count)));
+  const minGap = Math.min(activity.minMinutesBetweenCommits * 60, maxGap);
 
   const times: number[] = [];
   for (let k = 0; k < count; k += 1) {
@@ -326,14 +380,22 @@ export function generateSchedule(settings: Settings): Schedule {
   const tz = settings.output.tzOffset;
   const weekdayOf = (i: number): number => weekdayOfEpoch(startEpoch + i * 86400, tz);
 
-  const active = computeStates(rng, durationDays, weekdayOf, settings.activity);
-  let counts = computeCounts(rng, active, weekdayOf, settings.activity);
-  if (settings.activity.totalCommits != null) {
-    counts = rescaleToTotal(
-      counts,
-      settings.activity.totalCommits,
-      settings.activity.maxCommitsPerDay,
-    );
+  let counts: number[];
+  let active: boolean[];
+  if (settings.activity.generateRandom) {
+    active = computeStates(rng, durationDays, weekdayOf, settings.activity);
+    counts = computeCounts(rng, active, weekdayOf, settings.activity);
+    if (settings.activity.totalCommits != null) {
+      counts = rescaleToTotal(
+        counts,
+        settings.activity.totalCommits,
+        settings.activity.maxCommitsPerDay,
+      );
+    }
+  } else {
+    // No randomness: a blank canvas that only painted days fill.
+    active = new Array<boolean>(durationDays).fill(false);
+    counts = new Array<number>(durationDays).fill(0);
   }
   // Signwriter: painted levels replace the generated counts for those days
   // (level 0 erases -> no commits). Applied identically for preview/generate
@@ -342,7 +404,7 @@ export function generateSchedule(settings: Settings): Schedule {
   for (let i = 0; i < durationDays; i += 1) {
     dayIndexByKey.set(dateKeyOfEpoch(startEpoch + i * 86400, tz), i);
   }
-  const levelCounts = settings.signwriter.levelCounts;
+  const levelCounts = levelCountsFor(settings.signwriter.fullStrength);
   for (const [dateKey, level] of Object.entries(settings.signwriter.overrides)) {
     const idx = dayIndexByKey.get(dateKey);
     if (idx === undefined) continue; // outside the window (e.g. after a timeline change)
@@ -356,7 +418,10 @@ export function generateSchedule(settings: Settings): Schedule {
     const dateKey = dateKeyOfEpoch(epoch, tz);
     const count = counts[i];
     days.push({ dateKey, epoch, index: i, count, active: active[i] });
-    const times = dayTimestamps(rng, epoch, count, weekdayOf(i), settings.activity, tz);
+    const times = dayTimestamps(rng, epoch, count, weekdayOf(i), settings.activity, tz, {
+      enabled: settings.signwriter.grouped,
+      meanMinutes: settings.signwriter.groupMeanMinutes,
+    });
     for (const ts of times) {
       commits.push({ ts, dateKey, index: commits.length });
     }

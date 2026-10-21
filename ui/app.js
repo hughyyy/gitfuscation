@@ -54,9 +54,10 @@ function collectSettings() {
       out[parts[0]][parts[1]] = null;
     }
   }
-  // Painted banner travels with the settings so preview and generate agree.
+  // Painted banner travels with the settings so preview and generate agree;
+  // fullStrength/grouped/groupMeanMinutes come from the form via data-path.
   out.signwriter = {
-    levelCounts: signwriterLevelCounts,
+    ...out.signwriter,
     overrides: Object.fromEntries(painted),
   };
   return out;
@@ -184,10 +185,10 @@ function renderLegend(palette) {
 // ---------------------------------------------------------------------------
 
 let debounceTimer = null;
-let signwriterLevelCounts = [6, 14, 28, 60];
 let painted = new Map(); // dateKey -> level 0..4
 let paintEnabled = false;
 let paintLevel = 4;
+let paintRightLevel = 0;
 
 function schedulePreview() {
   clearTimeout(debounceTimer);
@@ -225,26 +226,34 @@ function paintCell(cell, level) {
 
 function bindPainting() {
   const chart = document.getElementById('chart');
-  let dragging = false;
+  let leftDrag = false;
+  let rightDrag = false;
   chart.addEventListener('mousedown', (evt) => {
-    if (!paintEnabled || evt.button !== 0) return;
-    dragging = true;
-    const cell = cellFromEvent(evt);
-    if (cell) paintCell(cell, paintLevel);
+    if (!paintEnabled) return;
+    if (evt.button === 0) {
+      leftDrag = true;
+      const cell = cellFromEvent(evt);
+      if (cell) paintCell(cell, paintLevel);
+    } else if (evt.button === 2) {
+      rightDrag = true;
+      const cell = cellFromEvent(evt);
+      if (cell) paintCell(cell, paintRightLevel);
+    }
   });
   window.addEventListener('mousemove', (evt) => {
-    if (!dragging) return;
+    if (!leftDrag && !rightDrag) return;
     const cell = cellFromEvent(evt);
-    if (cell) paintCell(cell, paintLevel);
+    if (!cell) return;
+    if (leftDrag) paintCell(cell, paintLevel);
+    else if (rightDrag) paintCell(cell, paintRightLevel);
   });
   window.addEventListener('mouseup', () => {
-    dragging = false;
+    leftDrag = false;
+    rightDrag = false;
   });
+  // Right-click: suppress the context menu; painting happens on mousedown/drag.
   chart.addEventListener('contextmenu', (evt) => {
-    if (!paintEnabled) return;
-    evt.preventDefault();
-    const cell = cellFromEvent(evt);
-    if (cell) paintCell(cell, 0);
+    if (paintEnabled) evt.preventDefault();
   });
 }
 
@@ -357,21 +366,32 @@ async function boot() {
     document.getElementById('generate-btn').addEventListener('click', onGenerate);
 
     // Signwriter painting
-    signwriterLevelCounts = defaults.signwriter?.levelCounts ?? signwriterLevelCounts;
     const paintToggle = document.getElementById('paint-enabled');
     const levelSlider = document.getElementById('paint-level');
+    const rightSlider = document.getElementById('paint-right-level');
     paintToggle.addEventListener('change', () => {
       paintEnabled = paintToggle.checked;
       document.getElementById('chart').classList.toggle('painting', paintEnabled);
     });
+    const sliderOut = (slider) => slider.closest('.range-row').querySelector('output');
     levelSlider.addEventListener('input', () => {
       paintLevel = Number(levelSlider.value);
-      levelSlider.closest('.range-row').querySelector('output').textContent = paintLevel;
+      sliderOut(levelSlider).textContent = paintLevel;
+    });
+    rightSlider.addEventListener('input', () => {
+      paintRightLevel = Number(rightSlider.value);
+      sliderOut(rightSlider).textContent = paintRightLevel;
     });
     document.getElementById('clear-banner-btn').addEventListener('click', () => {
       painted.clear();
       schedulePreview();
     });
+    // Grouped commits reveals the session-length field.
+    const groupedToggle = control('signwriter.grouped');
+    const groupWrap = document.getElementById('group-mean-wrap');
+    const syncGroup = () => groupWrap.classList.toggle('hidden', !groupedToggle.checked);
+    groupedToggle.addEventListener('change', syncGroup);
+    syncGroup();
     bindPainting();
 
     schedulePreview();

@@ -79,15 +79,19 @@ The full settings schema (with defaults) lives in SPEC §3. Highlights:
 
 ### Signwriter (banner painting)
 
-In the Generator, tick **Paint mode**, pick a brush level on the black→green
-slider, then click or drag across the chart — right-click erases a cell, the
-"erase all" button clears the banner. Each painted level maps to a fixed commit
-count (`levelCounts`, default 6/14/28/60), so the generated repo contains
-exactly the pattern you drew. The banner travels with the settings, so preview
-and generate always agree; while painting is active the preview uses shade-exact
-absolute levels. On GitHub, the contribution graph re-colors cells with its own
-relative algorithm — keep painted counts above the natural background for the
-clearest result.
+The left panel has two collapsible sections. **Random commits**: uncheck
+*Generate random activity* for a blank canvas — the repo then contains only the
+days you paint. **Painting**: tick *Paint mode*, choose brushes with the two
+colour sliders (left-click level, right-click level — set one to 0 to make that
+button erase), then click or drag across the chart; right-click and drag works
+too. **Full strength commits** (5–5000) sets the count painted at level 4 —
+lower levels scale by quarter. **Grouped commits** packs a painted day into a
+short session (mean length in minutes) instead of an all-day spread. "Erase all
+painted cells" resets the banner. The banner travels with the settings, so
+preview and generate always agree; while painting is active the preview uses
+shade-exact absolute levels. On GitHub, the contribution graph re-colors cells
+with its own relative algorithm — keep painted counts above the natural
+background for the clearest result.
 
 ## Repositories: inspect authorship + reattribution
 

@@ -132,6 +132,7 @@ did not come from `git config user.email`.
 |---|---|---|---|
 |`seed`|int|`20261021`|PRNG seed; same seed ⇒ same schedule|
 |`totalCommits`|int or null|null|If set, the generator rescales daily counts so the sum matches (overrides mean)|
+|`generateRandom`|bool|`true`|`false` disables the random model entirely — a blank canvas that only painted days fill|
 |`meanCommitsPerDay`|float|5|Baseline Poisson intensity for an *active* day|
 |`maxCommitsPerDay`|int|140|Hard cap per day (bursts clamp here)|
 |`burstProbability`|float|0.04|Per-active-day chance of a marathon burst day|
@@ -178,7 +179,9 @@ did not come from `git config user.email`.
 
 |Key|Type|Default|Meaning|
 |---|---|---|---|
-|`levelCounts`|array[4]|`[6, 14, 28, 60]`|Commit counts produced by painting levels 1–4; strictly increasing ints ≤ `maxCommitsPerDay`|
+|`fullStrength`|int 5..5000|`60`|Commit count painted at level 4; levels 1–3 scale linearly (¼, ½, ¾)|
+|`grouped`|bool|`false`|Painted days pack their commits into a tight session window|
+|`groupMeanMinutes`|int 1..1440|`30`|Mean session length for grouped painted days|
 |`overrides`|map dateKey→level|`{}`|`YYYY-MM-DD` → painted level 0..4 (0 erases the day)|
 
 Painting replaces those days' generated counts before timestamp generation (§4.1);
@@ -186,9 +189,12 @@ level 0 zeroes the day. The preview/generate paths share the same overrides, so
 the painted banner IS the history. While any override is set, `previewFor`
 renders with an absolute scale whose thresholds sit at the midpoints of the
 painted counts (§5.1), so every painted cell shows exactly its intended shade.
-GitHub's own contribution graph re-colors by its relative algorithm on push —
-the preview is shade-accurate; GitHub fidelity depends on keeping painted counts
-above the natural background.
+Grouped days sample one hour-weighted session start and emit the day's commits
+at a steady cadence over ~`groupMeanMinutes`; very large painted counts relax
+the per-commit min gap so a day can physically fit. GitHub's own contribution
+graph re-colors by its relative algorithm on push — the preview is
+shade-accurate; GitHub fidelity depends on keeping painted counts above the
+natural background.
 
 ## 4. Day 1 — Activity generator
 

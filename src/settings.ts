@@ -30,10 +30,11 @@ export interface TimelineSettings {
 export interface ActivitySettings {
   seed: number;
   totalCommits: number | null;
+  generateRandom: boolean; // false -> blank canvas (no random activity)
   meanCommitsPerDay: number;
   maxCommitsPerDay: number;
   burstProbability: number;
-  burstMinCommits: number; // floor for a burst (marathon) day's count
+  burstMinCommits: number;
   weekendBoost: number;
   weekendCommitBoost: number;
   streakPersistence: number;
@@ -59,7 +60,9 @@ export interface PreviewSettings {
 
 /** Signwriter: paint arbitrary levels onto specific days (banner art). */
 export interface SignwriterSettings {
-  levelCounts: number[]; // [L1..L4] commits per painted level, strictly increasing
+  fullStrength: number; // commits painted at level 4 (5..5000); levels 1-3 scale down
+  grouped: boolean; // pack painted-day commits into a tight session window
+  groupMeanMinutes: number; // mean session length for grouped painted days
   overrides: Record<string, number>; // dateKey 'YYYY-MM-DD' -> level 0..4
 }
 
@@ -72,7 +75,17 @@ export interface Settings {
   signwriter: SignwriterSettings;
 }
 
-export const DEFAULT_SIGNWRITER_LEVEL_COUNTS = [6, 14, 28, 60];
+export const DEFAULT_SIGNWRITER_FULL_STRENGTH = 60;
+export const DEFAULT_GROUP_MEAN_MINUTES = 30;
+
+/** Level 1..4 counts derived from the full-strength value (linear scale). */
+export function levelCountsFor(fullStrength: number): [number, number, number, number] {
+  const f = Math.max(5, Math.round(fullStrength));
+  const l1 = Math.max(1, Math.round(f / 4));
+  const l2 = Math.max(l1 + 1, Math.round(f / 2));
+  const l3 = Math.max(l2 + 1, Math.round((3 * f) / 4));
+  return [l1, l2, l3, f];
+}
 
 export type IdentitySource = 'env' | 'git' | 'fallback';
 
@@ -180,6 +193,7 @@ export function defaultSettings(
     activity: {
       seed: 20261021,
       totalCommits: null,
+      generateRandom: true,
       meanCommitsPerDay: 5,
       maxCommitsPerDay: 140,
       burstProbability: 0.04,
@@ -205,7 +219,9 @@ export function defaultSettings(
       absoluteThresholds: [...DEFAULT_ABSOLUTE_THRESHOLDS],
     },
     signwriter: {
-      levelCounts: [...DEFAULT_SIGNWRITER_LEVEL_COUNTS],
+      fullStrength: DEFAULT_SIGNWRITER_FULL_STRENGTH,
+      grouped: false,
+      groupMeanMinutes: DEFAULT_GROUP_MEAN_MINUTES,
       overrides: {},
     },
   };
@@ -390,11 +406,18 @@ export function normalizeSettings(raw: unknown, runtime: RuntimeDefaults = compu
     if (!isRecord(a)) err(col, 'activity', 'expected an object');
     else {
       for (const k of Object.keys(a)) {
-        if (!['seed', 'totalCommits', 'meanCommitsPerDay', 'maxCommitsPerDay', 'burstProbability', 'burstMinCommits', 'weekendBoost', 'weekendCommitBoost', 'streakPersistence', 'meanGapDays', 'hourWeights', 'minMinutesBetweenCommits', 'commitCountStyle'].includes(k)) {
+        if (!['seed', 'totalCommits', 'generateRandom', 'meanCommitsPerDay', 'maxCommitsPerDay', 'burstProbability', 'burstMinCommits', 'weekendBoost', 'weekendCommitBoost', 'streakPersistence', 'meanGapDays', 'hourWeights', 'minMinutesBetweenCommits', 'commitCountStyle'].includes(k)) {
           err(col, `activity.${k}`, 'unknown setting');
         }
       }
       s.activity.seed = int(col, 'activity.seed', a.seed, s.activity.seed);
+      if (a.generateRandom !== undefined) {
+        if (typeof a.generateRandom !== 'boolean') {
+          err(col, 'activity.generateRandom', `expected a boolean, got ${JSON.stringify(a.generateRandom)}`);
+        } else {
+          s.activity.generateRandom = a.generateRandom;
+        }
+      }
       if (a.totalCommits !== undefined && a.totalCommits !== null) {
         s.activity.totalCommits = int(col, 'activity.totalCommits', a.totalCommits, s.activity.totalCommits ?? 1000);
         if (s.activity.totalCommits !== null && s.activity.totalCommits < 1) {
@@ -472,22 +495,25 @@ export function normalizeSettings(raw: unknown, runtime: RuntimeDefaults = compu
     if (!isRecord(sw)) err(col, 'signwriter', 'expected an object');
     else {
       for (const k of Object.keys(sw)) {
-        if (!['levelCounts', 'overrides'].includes(k)) {
+        if (!['fullStrength', 'grouped', 'groupMeanMinutes', 'overrides'].includes(k)) {
           err(col, `signwriter.${k}`, 'unknown setting');
         }
       }
-      const lc = numArray(col, 'signwriter.levelCounts', sw.levelCounts, s.signwriter.levelCounts, 4);
-      if (sw.levelCounts !== undefined) {
-        const ints = lc.every((x) => Number.isInteger(x) && x >= 1);
-        if (!ints) err(col, 'signwriter.levelCounts', 'must be 4 positive integers');
-        for (let i = 1; i < lc.length; i += 1) {
-          if (lc[i] !== undefined && lc[i - 1] !== undefined && lc[i] <= lc[i - 1]) {
-            err(col, 'signwriter.levelCounts', 'must be strictly increasing');
-            break;
-          }
+      s.signwriter.fullStrength = clampNum(col, 'signwriter.fullStrength', sw.fullStrength, s.signwriter.fullStrength, 5, 5000);
+      if (sw.fullStrength !== undefined && !Number.isInteger(s.signwriter.fullStrength)) {
+        err(col, 'signwriter.fullStrength', `expected an integer, got ${sw.fullStrength}`);
+      }
+      if (sw.grouped !== undefined) {
+        if (typeof sw.grouped !== 'boolean') {
+          err(col, 'signwriter.grouped', `expected a boolean, got ${JSON.stringify(sw.grouped)}`);
+        } else {
+          s.signwriter.grouped = sw.grouped;
         }
       }
-      s.signwriter.levelCounts = lc;
+      s.signwriter.groupMeanMinutes = clampNum(col, 'signwriter.groupMeanMinutes', sw.groupMeanMinutes, s.signwriter.groupMeanMinutes, 1, 1440);
+      if (sw.groupMeanMinutes !== undefined && !Number.isInteger(s.signwriter.groupMeanMinutes)) {
+        err(col, 'signwriter.groupMeanMinutes', `expected an integer, got ${sw.groupMeanMinutes}`);
+      }
       if (sw.overrides !== undefined) {
         if (!isRecord(sw.overrides)) {
           err(col, 'signwriter.overrides', 'expected an object of dateKey -> level');

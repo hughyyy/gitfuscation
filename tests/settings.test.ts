@@ -134,9 +134,12 @@ test('normalization deep-copies; input arrays are not shared', () => {
   assert.equal(norm({}).settings.activity.hourWeights[0], DEFAULT_HOUR_WEIGHTS[0]);
 });
 
-test('signwriter defaults and validation', () => {
-  assert.deepEqual(norm({}).settings.signwriter.levelCounts, [6, 14, 28, 60]);
+test('signwriter and randomness defaults and validation', () => {
+  assert.equal(norm({}).settings.signwriter.fullStrength, 60);
+  assert.equal(norm({}).settings.signwriter.grouped, false);
+  assert.equal(norm({}).settings.signwriter.groupMeanMinutes, 30);
   assert.deepEqual(norm({}).settings.signwriter.overrides, {});
+  assert.equal(norm({}).settings.activity.generateRandom, true);
   // valid overrides round-trip
   const ok = norm({ signwriter: { overrides: { '2025-03-05': 4, '2025-03-06': 0 } } });
   assert.deepEqual(ok.errors, []);
@@ -146,10 +149,13 @@ test('signwriter defaults and validation', () => {
     { signwriter: { overrides: { '2025-13-99': 2 } } }, // bad date key
     { signwriter: { overrides: { '2025-03-05': 9 } } }, // level out of range
     { signwriter: { overrides: { '2025-03-05': 1.5 } } }, // non-integer
-    { signwriter: { levelCounts: [6, 14, 28] } }, // wrong length
-    { signwriter: { levelCounts: [6, 6, 28, 60] } }, // not strictly increasing
-    { signwriter: { levelCounts: [6.5, 14, 28, 60] } }, // non-integer
-    { signwriter: { levelCounts: [0, 14, 28, 60] } }, // not >= 1
+    { signwriter: { fullStrength: 4 } }, // below minimum
+    { signwriter: { fullStrength: 5001 } }, // above maximum
+    { signwriter: { fullStrength: 100.5 } }, // non-integer
+    { signwriter: { groupMeanMinutes: 0 } },
+    { signwriter: { groupMeanMinutes: 1441 } },
+    { signwriter: { grouped: 'yes' } },
+    { activity: { generateRandom: 'no' } },
     { signwriter: { bogus: 1 } },
   ]) {
     assert.ok(norm(raw as never).errors.length > 0, JSON.stringify(raw));

@@ -247,6 +247,7 @@ test('absolute color scale uses thresholds in order', () => {
 test('signwriter overrides replace counts exactly; level 0 erases', () => {
   const s = settings((x) => {
     x.activity.burstProbability = 0;
+    x.signwriter.fullStrength = 60; // levels => [15, 30, 45, 60]
     x.signwriter.overrides = {
       '2025-10-01': 4, // first day, window start
       '2025-10-02': 1,
@@ -255,11 +256,72 @@ test('signwriter overrides replace counts exactly; level 0 erases', () => {
   });
   const schedule = generateSchedule(s);
   const byKey = new Map(schedule.days.map((d) => [d.dateKey, d.count]));
-  assert.equal(byKey.get('2025-10-01'), 60); // levelCounts[3]
-  assert.equal(byKey.get('2025-10-02'), 6); // levelCounts[0]
+  assert.equal(byKey.get('2025-10-01'), 60); // full strength
+  assert.equal(byKey.get('2025-10-02'), 15); // one quarter
   assert.equal(byKey.get('2025-10-03'), 0);
   // Deterministic with the same overrides (parity with preview/generate).
   assert.deepEqual(generateSchedule(s).days, schedule.days);
+});
+
+test('full strength slider scales every painted level', () => {
+  const s = settings((x) => {
+    x.activity.burstProbability = 0;
+    x.signwriter.fullStrength = 200;
+    x.signwriter.overrides = { '2025-10-01': 1, '2025-10-02': 2, '2025-10-03': 3, '2025-10-04': 4 };
+  });
+  const schedule = generateSchedule(s);
+  const byKey = new Map(schedule.days.map((d) => [d.dateKey, d.count]));
+  assert.equal(byKey.get('2025-10-01'), 50);
+  assert.equal(byKey.get('2025-10-02'), 100);
+  assert.equal(byKey.get('2025-10-03'), 150);
+  assert.equal(byKey.get('2025-10-04'), 200);
+});
+
+test('generateRandom: false yields a blank canvas except painted days', () => {
+  const s = settings((x) => {
+    x.activity.generateRandom = false;
+    x.signwriter.overrides = { '2025-10-10': 4 };
+  });
+  const schedule = generateSchedule(s);
+  const nonPainted = schedule.days.filter((d) => d.dateKey !== '2025-10-10').map((d) => d.count);
+  assert.ok(nonPainted.every((c) => c === 0), 'all unpainted days empty');
+  assert.equal(schedule.days.find((d) => d.dateKey === '2025-10-10')!.count, 60);
+  assert.equal(schedule.totals.commits, 60); // only the painted day contributes
+});
+
+test('grouped painted days pack commits into a short session window', () => {
+  const s = settings((x) => {
+    x.activity.generateRandom = false;
+    x.signwriter.fullStrength = 60;
+    x.signwriter.grouped = true;
+    x.signwriter.groupMeanMinutes = 30;
+    x.signwriter.overrides = { '2025-10-10': 4 };
+  });
+  const schedule = generateSchedule(s);
+  const dayCommits = schedule.commits.filter((c) => c.dateKey === '2025-10-10');
+  assert.equal(dayCommits.length, 60);
+  const spread = dayCommits[dayCommits.length - 1].ts - dayCommits[0].ts;
+  // 60 commits at 30s cadence fit well inside 30 minutes.
+  assert.ok(spread < 30 * 60, `spread ${spread}s should be tighter than a full day`);
+  // Still strictly ascending within the day.
+  for (let i = 1; i < dayCommits.length; i += 1) {
+    assert.ok(dayCommits[i].ts > dayCommits[i - 1].ts);
+  }
+});
+
+test('large painted days fit inside a calendar day (min gap relaxes)', () => {
+  const s = settings((x) => {
+    x.activity.generateRandom = false;
+    x.signwriter.fullStrength = 5000;
+    x.signwriter.overrides = { '2025-10-10': 4 };
+  });
+  const schedule = generateSchedule(s);
+  const dayCommits = schedule.commits.filter((c) => c.dateKey === '2025-10-10');
+  assert.equal(dayCommits.length, 5000);
+  const day = schedule.days.find((d) => d.dateKey === '2025-10-10')!;
+  for (const c of dayCommits) {
+    assert.ok(c.ts >= day.epoch && c.ts < day.epoch + 86400, 'within the day');
+  }
 });
 
 test('signwriter overrides outside the window are ignored', () => {

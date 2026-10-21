@@ -83,9 +83,9 @@ test('painted banner renders exact painted levels; unpainted stays natural', () 
   assert.equal(cell('2025-01-05').level, 4);
   assert.equal(cell('2025-01-05').count, 60);
   assert.equal(cell('2025-01-06').level, 2);
-  assert.equal(cell('2025-01-06').count, 14);
+  assert.equal(cell('2025-01-06').count, 30);
   assert.equal(cell('2025-01-10').level, 1);
-  assert.equal(cell('2025-01-10').count, 6);
+  assert.equal(cell('2025-01-10').count, 15);
   // Unpainted days keep their generated counts.
   const same = payload.cells.filter((c) => !['2025-01-05', '2025-01-06', '2025-01-10'].includes(c.dateISO));
   const beforeSame = before.cells.filter((c) => !['2025-01-05', '2025-01-06', '2025-01-10'].includes(c.dateISO));
