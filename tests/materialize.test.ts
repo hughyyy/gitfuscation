@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -99,6 +99,22 @@ test('preview and repo per-day counts agree exactly (parity)', async () => {
     const repoCount = perDay.get(cell.dateISO) ?? 0;
     assert.equal(repoCount, cell.count, `${cell.dateISO}: repo ${repoCount} != preview ${cell.count}`);
   }
+});
+
+test('worktree is checked out after generation', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gitfuscation-'));
+  const settings = testSettings(path.join(dir, 'repo'), 30);
+  await generateRepo(settings);
+  // Files must exist on disk (commits are built via plumbing, so the checkout
+  // is explicit) and the worktree must be clean.
+  const repoDir = path.join(dir, 'repo');
+  const status = (await runGit(['status', '--porcelain'], { cwd: repoDir })).trim();
+  assert.equal(status, '', `expected clean worktree, got: ${status}`);
+  const tracked = (await runGit(['ls-files'], { cwd: repoDir })).trim().split('\n').filter((l) => l.length > 0);
+  assert.ok(tracked.length >= 8, 'all corpus files tracked');
+  const first = tracked[0] as string;
+  const content = await readFile(path.join(repoDir, first), 'utf8');
+  assert.match(content, /# activity-history/, `${first} has the project header`);
 });
 
 test('outPath exists without replace -> clear error', async () => {

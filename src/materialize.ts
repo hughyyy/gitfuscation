@@ -115,6 +115,9 @@ export async function generateRepo(
   }
 
   await fsck(cwd);
+  // Materialize the working tree: commits were built via plumbing, so nothing
+  // is checked out until now.
+  await runGit(['reset', '--hard', branch], { cwd });
   await runGit(['gc', '--quiet'], { cwd });
 
   return {
