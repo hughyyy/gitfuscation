@@ -71,6 +71,7 @@ gitfuscation/
     settings.ts         # schema, defaults, validation, JSON (de)serialization
     schedule.ts         # activity model -> ordered list of commits (core)
     content.ts          # file corpus, text generators, commit-message bank
+    claim.ts            # claim.sh script shipped in every generated repo
     gitutil.ts          # plumbing wrappers (hash-object, mktree, commit-tree,
                         #   update-ref, fast helpers)
     materialize.ts      # Day 1: schedule -> fresh repo
@@ -80,7 +81,7 @@ gitfuscation/
   ui/
     index.html, app.js, style.css
   tests/
-    schedule.test.ts, settings.test.ts, preview.test.ts
+    schedule.test.ts, settings.test.ts, preview.test.ts, claim.test.ts
 
   generated/            # scratch output, gitignored
 ```
@@ -269,9 +270,10 @@ author/committer identity and dates supplied by environment variables.
    Record `state = {path: blobOid}` and compute the initial tree.
 3. **Initial commit**: all files, `author_date = startDate 00:00 tz`, message
    `chore: initial scaffold`. The corpus includes a static `README.md` rendered
-   from the schedule (ASCII contribution chart, §9) — seeded at day 0 and
-   never touched by the random content stream, so the pattern document is part
-   of the history from the first commit.
+   from the schedule (ASCII contribution chart, §9) and an executable
+   `claim.sh` that re-authors the history to a cloner's identity. Both are
+   seeded at day 0 and never touched by the random content stream, so the
+   pattern document is part of the history from the first commit.
 4. For each scheduled commit in chronological order:
 
    - Update content: choose `1..filesPerCommit` files (weighted so active files
@@ -290,6 +292,19 @@ author/committer identity and dates supplied by environment variables.
 Performance: each commit is 3 execFile calls over ~24 file entries — well under
 a millisecond of git work each. 5,000 commits ≈ a few seconds. Single
 chronological parent chain keeps topology trivially correct.
+
+#### 4.2.1 Claim script (`claim.ts`)
+
+Every generated repo contains `claim.sh` (mode `100755`, static, in the initial
+commit): a standalone POSIX shell script that lets a cloner re-author the entire
+history to their own account. It prompts for a name + email (or accepts them as
+`$1`/`$2`), refuses a dirty worktree, validates the identity, and runs `git
+filter-branch --env-filter` over `--branches --tags`, overriding only
+`GIT_{AUTHOR,COMMITTER}_{NAME,EMAIL}` (dates and messages come from the original
+commits). It then deletes `refs/original`, expires reflogs, prunes the old
+objects, and sets the local `user.name`/`user.email`. Result: identical commit
+count, dates, trees, and README pattern — only authorship changes — so the
+clone can be force-pushed to the cloner's own remote.
 
 ### 4.3 Per-commit file plan (content.ts)
 

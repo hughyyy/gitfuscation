@@ -6,6 +6,7 @@
 
 import type { Settings } from './settings.ts';
 import { mulberry32 } from './schedule.ts';
+import { CLAIM_SCRIPT_PATH } from './claim.ts';
 
 // ---------------------------------------------------------------------------
 // Word banks
@@ -64,7 +65,7 @@ const BASE_PATHS = [
  * Files owned by the generator itself (e.g. the contribution-pattern README):
  * seeded once, never picked for random content edits.
  */
-export const STATIC_CONTENT_FILES = ['README.md'] as const;
+export const STATIC_CONTENT_FILES = ['README.md', CLAIM_SCRIPT_PATH] as const;
 const STATIC_SET: ReadonlySet<string> = new Set(STATIC_CONTENT_FILES);
 
 // ---------------------------------------------------------------------------

@@ -95,7 +95,7 @@ export async function hashObject(cwd: string, content: string): Promise<string> 
 
 interface TreeNode {
   dirs: Map<string, TreeNode>;
-  files: Map<string, string>; // name -> blob oid
+  files: Map<string, { oid: string; mode: string }>; // name -> blob
 }
 
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -107,7 +107,7 @@ const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
  */
 export async function writeTree(
   cwd: string,
-  entries: Array<{ path: string; oid: string }>,
+  entries: Array<{ path: string; oid: string; mode?: string }>,
 ): Promise<string> {
   if (entries.length === 0) return EMPTY_TREE;
   const root: TreeNode = { dirs: new Map(), files: new Map() };
@@ -122,7 +122,7 @@ export async function writeTree(
       }
       node = next;
     }
-    node.files.set(parts[parts.length - 1] as string, e.oid);
+    node.files.set(parts[parts.length - 1] as string, { oid: e.oid, mode: e.mode ?? '100644' });
   }
   const nameCompare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
   const render = async (node: TreeNode): Promise<string> => {
@@ -130,8 +130,8 @@ export async function writeTree(
     for (const [name, child] of node.dirs) {
       lines.push({ mode: '040000', type: 'tree', oid: await render(child), name });
     }
-    for (const [name, oid] of node.files) {
-      lines.push({ mode: '100644', type: 'blob', oid, name });
+    for (const [name, entry] of node.files) {
+      lines.push({ mode: entry.mode, type: 'blob', oid: entry.oid, name });
     }
     lines.sort((a, b) => nameCompare(a.name, b.name));
     const input = lines.map((l) => `${l.mode} ${l.type} ${l.oid}\t${l.name}`).join('\n') + '\n';

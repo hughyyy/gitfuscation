@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { Settings } from './settings.ts';
 import { generateSchedule, type Schedule, type ScheduleTotals } from './schedule.ts';
 import { makeContentSession, applyCommit, commitMessage, STATIC_CONTENT_FILES } from './content.ts';
+import { CLAIM_SCRIPT, CLAIM_SCRIPT_PATH } from './claim.ts';
 import { patternFromSettings } from './pattern.ts';
 import {
   initRepo,
@@ -80,11 +81,16 @@ export async function generateRepo(
 
   const session = makeContentSession(settings);
   // Static README with the contribution pattern (the schedule is known before
-  // any content is written); never touched by the random content stream.
+  // any content is written) and the claim script that re-authors the history
+  // to a cloner's own identity; neither is touched by the random content
+  // stream.
   const readmePath = STATIC_CONTENT_FILES[0];
   session.files.set(readmePath, patternFromSettings(settings));
   session.lastTouch.set(readmePath, 0);
   session.lastEntryDate.set(readmePath, '');
+  session.files.set(CLAIM_SCRIPT_PATH, CLAIM_SCRIPT);
+  session.lastTouch.set(CLAIM_SCRIPT_PATH, 0);
+  session.lastEntryDate.set(CLAIM_SCRIPT_PATH, '');
   const state = new Map<string, string>(); // path -> blob oid
   for (const [filePath, content] of session.files) {
     state.set(filePath, await hashObject(cwd, content));
@@ -94,6 +100,7 @@ export async function generateRepo(
     const entries = [...state.entries()].map(([filePath, oid]) => ({
       path: filePath,
       oid,
+      mode: filePath === CLAIM_SCRIPT_PATH ? '100755' : '100644',
     }));
     return writeTree(cwd, entries);
   };

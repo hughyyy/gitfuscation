@@ -7,6 +7,7 @@
 - **Activity generator** — a fresh repo with a year of human-looking commit history: streaks, gaps, weekend/Friday-night boosts, rare 100+ commit marathons. Preview the GitHub-style chart, tune live, generate.
 - **Signwriter** — click/drag shades onto the chart (or import an image → greyscale pixels) and the repo contains exactly your design. Two per-button brushes, grouped sessions, full-strength slider (5–5000). The banner is real: paint it, refresh, generate.
 - **Pattern README** — every generated repo ships with an ASCII chart of the pattern, the exact settings, and the program version.
+- **Claim script** — every generated repo ships `claim.sh`: a cloner runs it, enters their name + email, and the entire history re-authors to their account. Dates, messages, files, and the pattern README are untouched, so the art survives.
 - **Attribution repair** (`reauth`) — fix wrong commit authors (e.g. machine-local commits) on repos you own. Identity-only: every date, message, and file preserved.
 
 ## Quick start
@@ -21,6 +22,15 @@ Tune on the left → the chart re-renders live → **Generate repo**. Then push:
 ```bash
 cd generated/activity-history
 gh repo create my-banner --public --source . --push
+```
+
+Anyone can re-claim a generated repo for their own account:
+
+```bash
+cd my-banner
+./claim.sh "Your Name" you@example.com   # or run it bare to be prompted
+git remote set-url origin git@github.com:you/my-banner.git
+git push --force --all origin
 ```
 
 Your settings and painted design survive refreshes (localStorage); Export/Import moves them as JSON.
